@@ -1,0 +1,6 @@
+# Written by Claude Code beside a mod it loads from a folder; regenerated per build.
+.claude-plugin/types/
+*/.claude-plugin/types/
+tsconfig.json
+node_modules/
+.DS_Store

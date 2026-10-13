@@ -1,0 +1,12 @@
+{
+  "name": "kadaliao",
+  "owner": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
+  "description": "Claude Code mods by kadaliao: function-hook plugins that change Claude Code's own interface and behaviour",
+  "plugins": [
+    {
+      "name": "tps-meter",
+      "source": "./tps-meter",
+      "description": "Measures time to first token and output tokens/s of every model request, for your status line"
+    }
+  ]
+}
