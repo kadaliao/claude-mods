@@ -41,3 +41,5 @@ claude --plugin-dir ~/workspace/claude-mods/tps-meter
 
 `--plugin-dir` loads the working copy for that session and reloads it as you save. Uninstall the
 GitHub copy first (`claude plugin uninstall <mod>@kadaliao`) if both should not run at once.
+
+License: MIT

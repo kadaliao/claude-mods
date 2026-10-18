@@ -76,3 +76,5 @@ claude --plugin-dir ~/workspace/claude-mods/tps-meter   # 用工作副本开一�
 claude plugin validate ~/workspace/claude-mods/tps-meter
 claude plugin test ~/workspace/claude-mods/tps-meter
 ```
+
+许可证：MIT（License: MIT）

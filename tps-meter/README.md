@@ -86,3 +86,5 @@ claude --plugin-dir ~/workspace/claude-mods/tps-meter   # a session with the wor
 claude plugin validate ~/workspace/claude-mods/tps-meter
 claude plugin test ~/workspace/claude-mods/tps-meter
 ```
+
+License: MIT

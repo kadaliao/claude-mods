@@ -36,3 +36,5 @@ claude --plugin-dir ~/workspace/claude-mods/tps-meter
 ```
 
 `--plugin-dir` 让这个会话加载工作副本，保存文件时自动重新加载。如果不想和 GitHub 装的那份同时运行，先卸载它（`claude plugin uninstall <mod>@kadaliao`）。
+
+许可证：MIT（License: MIT）
