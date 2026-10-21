@@ -9,7 +9,7 @@ mod installs separately.
 
 | Mod | What it does | Install |
 | --- | --- | --- |
-| [tps-meter](tps-meter/) | Time to first token and output tokens/s of every model request, for your status line | `/plugin install tps-meter --marketplace kadaliao/claude-mods` |
+| [statusline](statusline/) | A two-row status band above the prompt: model, folder, git branch, context window, tokens in/out, cache rate, API cost, tokens/s and TTFT | `/plugin install statusline --marketplace kadaliao/claude-mods` |
 
 The install line is typed at the prompt of a Claude Code terminal session. From a shell:
 
@@ -36,7 +36,7 @@ then run `/reload-plugins` in an open session, or start a new one.
 
 ```bash
 git clone git@github.com:kadaliao/claude-mods.git ~/workspace/claude-mods
-claude --plugin-dir ~/workspace/claude-mods/tps-meter
+claude --plugin-dir ~/workspace/claude-mods/statusline
 ```
 
 `--plugin-dir` loads the working copy for that session and reloads it as you save. Uninstall the

@@ -1,0 +1,10 @@
+{
+  "name": "statusline",
+  "version": "0.1.0",
+  "description": "A two-row status band: model, folder, git branch, context window, tokens, cache rate, API cost, tokens/s and TTFT",
+  "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
+  "homepage": "https://github.com/kadaliao/claude-mods/tree/main/statusline",
+  "repository": "https://github.com/kadaliao/claude-mods",
+  "keywords": ["statusline", "ttft", "tokens-per-second", "cost", "context", "mod"],
+  "types": "./types/index.d.ts"
+}

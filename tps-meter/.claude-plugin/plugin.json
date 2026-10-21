@@ -1,8 +1,0 @@
-{
-  "name": "tps-meter",
-  "description": "Measures time to first token and output tokens/s of every model request, for your status line",
-  "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
-  "homepage": "https://github.com/kadaliao/claude-mods/tree/main/tps-meter",
-  "repository": "https://github.com/kadaliao/claude-mods",
-  "keywords": ["statusline", "ttft", "tokens-per-second", "mod"]
-}

@@ -4,9 +4,9 @@
   "description": "Claude Code mods by kadaliao: function-hook plugins that change Claude Code's own interface and behaviour",
   "plugins": [
     {
-      "name": "tps-meter",
-      "source": "./tps-meter",
-      "description": "Measures time to first token and output tokens/s of every model request, for your status line"
+      "name": "statusline",
+      "source": "./statusline",
+      "description": "A two-row status band: model, folder, git branch, context window, tokens, cache rate, API cost, tokens/s and TTFT"
     }
   ]
 }

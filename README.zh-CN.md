@@ -6,7 +6,7 @@
 
 | Mod | 作用 | 安装 |
 | --- | --- | --- |
-| [tps-meter](tps-meter/) | 每次模型请求的首 token 时间和每秒输出 token 数，显示到状态栏 | `/plugin install tps-meter --marketplace kadaliao/claude-mods` |
+| [statusline](statusline/) | 输入框上方两行状态栏：模型、目录、git 分支、上下文窗口、读写 token、缓存率、API 计价、token 速率和 TTFT | `/plugin install statusline --marketplace kadaliao/claude-mods` |
 
 上面的安装命令在 Claude Code 终端会话的输入框里输入。在 shell 里：
 
@@ -32,7 +32,7 @@ claude plugin update <mod>@kadaliao
 
 ```bash
 git clone git@github.com:kadaliao/claude-mods.git ~/workspace/claude-mods
-claude --plugin-dir ~/workspace/claude-mods/tps-meter
+claude --plugin-dir ~/workspace/claude-mods/statusline
 ```
 
 `--plugin-dir` 让这个会话加载工作副本，保存文件时自动重新加载。如果不想和 GitHub 装的那份同时运行，先卸载它（`claude plugin uninstall <mod>@kadaliao`）。
