@@ -10,6 +10,7 @@ mod installs separately.
 | Mod | What it does | Install |
 | --- | --- | --- |
 | [statusline](statusline/) | A two-row status band above the prompt: model, folder, git branch, context window, tokens in/out, cache rate, API cost, tokens/s and TTFT | `/plugin install statusline --marketplace kadaliao/claude-mods` |
+| [prompt-en](prompt-en/) | English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English; long prompts condensed, pasted code folded | `/plugin install prompt-en --marketplace kadaliao/claude-mods` |
 
 The install line is typed at the prompt of a Claude Code terminal session. From a shell:
 

@@ -1,0 +1,25 @@
+{
+  "name": "prompt-en",
+  "version": "0.1.0",
+  "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English",
+  "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
+  "homepage": "https://github.com/kadaliao/claude-mods/tree/main/prompt-en",
+  "repository": "https://github.com/kadaliao/claude-mods",
+  "keywords": ["translate", "english", "prompt", "mod"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Translation model",
+      "description": "The model that writes the English",
+      "default": "haiku",
+      "options": ["haiku", "sonnet", "opus"]
+    },
+    "reviewEnglish": {
+      "type": "boolean",
+      "title": "Review English prompts",
+      "description": "Correct or polish prompts you write in English, or suggest other ways to say them",
+      "default": true
+    }
+  }
+}

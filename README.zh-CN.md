@@ -7,6 +7,7 @@
 | Mod | 作用 | 安装 |
 | --- | --- | --- |
 | [statusline](statusline/) | 输入框上方两行状态栏：模型、目录、git 分支、上下文窗口、读写 token、缓存率、API 计价、token 速率和 TTFT | `/plugin install statusline --marketplace kadaliao/claude-mods` |
+| [prompt-en](prompt-en/) | 每条 prompt 下方一行英文：其他语言给译文，英文给纠错或别的说法；长 prompt 给精简版，粘贴的代码折叠成标签 | `/plugin install prompt-en --marketplace kadaliao/claude-mods` |
 
 上面的安装命令在 Claude Code 终端会话的输入框里输入。在 shell 里：
 
