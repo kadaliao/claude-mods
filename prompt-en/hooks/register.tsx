@@ -65,6 +65,18 @@ const FOREIGN = /[^\P{L}\p{Script=Latin}]/gu
 const countForeign = (s: string) => s.match(FOREIGN)?.length ?? 0
 const MARKER = /\[\[M(\d+)\]\]/g
 
+// What a host writes into the prompt for the model alone, such as the notes the desktop
+// app puts before the first prompt of a session with no folder. Only a closed block counts,
+// so a prompt that just mentions the tag keeps it.
+const HOST_NOTE = /<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/g
+
+// The person's own words: the prompt with the host's notes left out. A prompt with no
+// note comes back as it is, so its key, and the answer kept under it, stay the same.
+export function ownWords(text: string): string {
+  const own = text.replace(HOST_NOTE, '')
+  return own === text ? text : own.trim()
+}
+
 // Wide East Asian letters: two terminal cells each, and 2.5 English characters of meaning.
 const WIDE =
   /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/g
@@ -432,11 +444,12 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     submitted = undefined
     const isWanted = e.command === undefined && e.isMeta === undefined && ORIGINS.has(e.origin.kind)
-    const mode = isWanted ? modeOf(e.text) : null
+    const own = isWanted ? ownWords(e.text) : ''
+    const mode = isWanted ? modeOf(own) : null
     if (mode !== null && (mode === 'translate' || isReviewing) && (await read($, isOn))) {
-      const key = keyOf(e.text)
+      const key = keyOf(own)
       submitted = key
-      void answer($, key, e.text, mode, model).catch(() => {})
+      void answer($, key, own, mode, model).catch(() => {})
     }
     return next(e)
   })
@@ -459,10 +472,11 @@ export const register: Register = (on, options) => {
     if (!(await read($, isOn))) return base
 
     const mapped = await read($, memberOf(byRow, e))
-    const key = mapped ?? keyOf(e.props.text)
+    const own = ownWords(e.props.text)
+    const key = mapped ?? keyOf(own)
     let t = await read($, memberOf(byText, { requestId: key }))
     // A row from before this session (a resume) finds its answer in the store.
-    if (t === null && (mapped !== null || modeOf(e.props.text) !== null)) t = await loadSaved($, key)
+    if (t === null && (mapped !== null || modeOf(own) !== null)) t = await loadSaved($, key)
     if (t === null) return base
 
     const { Box, Text } = $.ui.resolve(e)

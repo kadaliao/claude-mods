@@ -71,7 +71,7 @@ claude plugin install prompt-en@kadaliao
 
 ## 原理
 
-在 `prompt.submit` 时，先把 prompt 里粘贴的内容折叠，再看剩下你自己写的文字：含有拉丁字母以外的字母就翻译；有 3 个以上英文词就纠错。然后发一次 `$.model.complete` 请求，不等它返回，prompt 照常立即提交。`UserMessage` 的渲染钩子先画引擎原本的那一行，再在下面画英文：请求进行中显示 `translating…` 或 `reviewing…`，完成后显示结果。纠错时标绿的词，是把改正版和你的原文逐词对比找出来的。
+在 `prompt.submit` 时，先去掉宿主只写给模型看的 `<system-reminder>` 块（比如桌面应用在未选文件夹的会话里，会在第一条 prompt 前面加一段），再把粘贴的内容折叠，看剩下你自己写的文字：含有拉丁字母以外的字母就翻译；有 3 个以上英文词就纠错。然后发一次 `$.model.complete` 请求，不等它返回，prompt 照常立即提交。`UserMessage` 的渲染钩子先画引擎原本的那一行，再在下面画英文：请求进行中显示 `translating…` 或 `reviewing…`，完成后显示结果。纠错时标绿的词，是把改正版和你的原文逐词对比找出来的。
 
 mod 写的内容都不会发给对话所用的模型，模型读到的仍是你写的原文。
 

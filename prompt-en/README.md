@@ -83,7 +83,9 @@ Options are set in the plugin's options (`/config`).
 
 ## How it works
 
-On `prompt.submit` the mod folds the prompt's pastes and reads what is left, your own words.
+On `prompt.submit` the mod drops the `<system-reminder>` blocks a host adds for the model alone
+(the desktop app puts one before the first prompt of a session with no folder), folds the
+prompt's pastes, and reads what is left, your own words.
 Letters outside the Latin script mean a translation; three or more English words, a review.
 It sends one `$.model.complete` request without waiting, so the prompt goes on at once. The
 `UserMessage` render hook draws the engine's row, then the English below it: `translating…` or
