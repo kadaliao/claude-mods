@@ -15,6 +15,16 @@
       "name": "prompt-en",
       "source": "./prompt-en",
       "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English"
+    },
+    {
+      "name": "danmaku",
+      "source": "./danmaku",
+      "description": "Bilibili-style bullet comments that fly across a side pane, heckling what Claude does as it works"
+    },
+    {
+      "name": "ambience",
+      "source": "./ambience",
+      "description": "Sounds for what Claude does (commands, edits, tests, commits, a finished turn), a notification after a long turn, and a live tally of the turn's work under the prompt"
     }
   ]
 }

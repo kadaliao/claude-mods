@@ -11,6 +11,8 @@ mod installs separately.
 | --- | --- | --- |
 | [statusline](statusline/) | A two-row status band above the prompt: model, folder, git branch, context window, tokens in/out, cache rate, API cost, tokens/s and TTFT | `/plugin install statusline --marketplace kadaliao/claude-mods` |
 | [prompt-en](prompt-en/) | English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English; long prompts condensed, pasted code folded | `/plugin install prompt-en --marketplace kadaliao/claude-mods` |
+| [danmaku](danmaku/) | Bilibili-style bullet comments (danmaku) flying across a side pane, heckling what Claude does as it works: instant reactions to a `rm -rf` or a failing test, and quips a small model writes every few seconds | `/plugin install danmaku --marketplace kadaliao/claude-mods` |
+| [ambience](ambience/) | Sounds for what Claude does (a command's click, an edit's pop, a fanfare when tests pass, a sad trombone when they fail, a chime when the turn ends), a notification after a long turn, and a live tally of the turn's work under the prompt | `/plugin install ambience --marketplace kadaliao/claude-mods` |
 
 The install line is typed at the prompt of a Claude Code terminal session. From a shell:
 

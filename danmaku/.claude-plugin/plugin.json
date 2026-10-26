@@ -1,0 +1,26 @@
+{
+  "name": "danmaku",
+  "version": "0.1.0",
+  "description": "Bilibili-style bullet comments that fly across a side pane, heckling what Claude does as it works",
+  "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
+  "homepage": "https://github.com/kadaliao/claude-mods/tree/main/danmaku",
+  "repository": "https://github.com/kadaliao/claude-mods",
+  "keywords": ["danmaku", "bilibili", "pane", "fun", "mod"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Comment model",
+      "description": "The model that writes the comments",
+      "default": "haiku",
+      "options": ["haiku", "sonnet"]
+    },
+    "density": {
+      "type": "string",
+      "title": "Density",
+      "description": "How often the model is asked for comments: low every 8s at most, normal 4s, high 2s",
+      "default": "normal",
+      "options": ["low", "normal", "high"]
+    }
+  }
+}

@@ -1,0 +1,72 @@
+# danmaku
+
+[English](README.md) | 简体中文
+
+Claude 干活的时候，侧边面板里飘 B 站风格的弹幕，从右往左飞，吐槽它在干什么：跑 `rm -rf` 时来一句"前方高能！！"，测试挂了来一句"红了红了"，小模型觉得有梗的时候来一句"这波操作有点东西"。
+
+```
+┌ 弹幕 ──────────────────────────────────────────┐
+│        前排            666                      │
+│   又在 grep 了                     前方高能！！ │
+│                  这波操作有点东西               │
+│ 23 条弹幕 · haiku                               │
+└─────────────────────────────────────────────────┘
+```
+
+## 安装
+
+在终端会话的输入框里：
+
+```
+/plugin install danmaku --marketplace kadaliao/claude-mods
+```
+
+或者在 shell 里：
+
+```bash
+claude plugin marketplace add kadaliao/claude-mods
+claude plugin install danmaku@kadaliao
+```
+
+装好后输入 `/danmaku` 打开面板。
+
+## 用法
+
+| 命令 | 作用 |
+| --- | --- |
+| `/danmaku` | 打开面板；已经开着就关掉 |
+| `/danmaku on` / `/danmaku off` | 打开 / 关闭 |
+| `/danmaku <文字>` | 发一条自己的弹幕（加粗带下划线） |
+
+开关状态会记住，下次开会话时自动打开。自动打开时终端要至少 144 列宽，不够宽就先等着；手动输入 `/danmaku` 则任何宽度都能打开。用面板上的关闭标记关掉，等于关闭弹幕。
+
+## 原理
+
+- **即时反应**：有些事情查表马上发弹幕，不调模型。包括危险命令（`rm -rf`、`sudo`、`--force`、`reset --hard`）、测试命令通过或失败、`git push` 和 `git commit`、派出子代理，以及回合开始、结束或被打断。读文件、改文件、普通命令这类太频繁的事，只偶尔来一条。
+- **模型弹幕**：每次工具调用、你的提问和回合结束，都会压成一行短描述放进队列，比如"Claude 跑命令：npm test（失败了）"。攒到 3 条，或第一条进队满 3 秒，就让模型写 1 到 3 条弹幕，每条不超过 15 个字。请求里带上最近 10 条弹幕，避免重复。同一时间只发一个请求，两次请求至少隔 4 秒（由 `density` 选项决定：8 秒、4 秒或 2 秒）。
+- **画面**：每条弹幕大约 7 秒飞过整个面板，所以长弹幕跑得快一些，跟 B 站一样。新弹幕放进最靠上、有空位、而且不会追上前一条的轨道；所有轨道都满时先排队。面板上有弹幕时每秒重绘 8 次，没有弹幕时不重绘。
+
+## 选项
+
+| 选项 | 取值 | 默认 |
+| --- | --- | --- |
+| `model` | `haiku`、`sonnet` | `haiku` |
+| `density` | `low`（最多 8 秒请求一次）、`normal`（4 秒）、`high`（2 秒） | `normal` |
+
+在 `/config` 里改，或者写在 `~/.claude/settings.json` 的 `pluginConfigs.danmaku` 下。
+
+## 限制
+
+- 发给模型的内容：你提问的前 80 个字、每条命令的前 60 个字、文件名（不含文件内容）、搜索关键词，以及 Claude 回答的前 120 个字。用的是会话本身的账号和额度，跟 Claude Code 自己的请求一样计费。用 `haiku` 加默认密度，花费很少。面板关着或没显示时不发请求。
+- 弹幕只是围绕刚发生的事起哄，不保证每条都好笑，偶尔会重复。
+- 在终端和桌面端绘制。mod（function hooks）是 Claude Code 的 early access API，版本之间可能变化。在 Claude Code 2.1.310 上构建和测试。
+
+## 开发
+
+```bash
+claude --plugin-dir ~/workspace/claude-mods/danmaku   # 加载工作副本的会话
+claude plugin validate ~/workspace/claude-mods/danmaku
+claude plugin test ~/workspace/claude-mods/danmaku
+```
+
+许可证：MIT（License: MIT）

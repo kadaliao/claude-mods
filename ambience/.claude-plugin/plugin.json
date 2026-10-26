@@ -1,0 +1,26 @@
+{
+  "name": "ambience",
+  "version": "0.1.0",
+  "description": "Sounds for what Claude does (commands, edits, tests, commits, a finished turn), a notification after a long turn, and a live tally of the turn's work under the prompt",
+  "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
+  "homepage": "https://github.com/kadaliao/claude-mods/tree/main/ambience",
+  "repository": "https://github.com/kadaliao/claude-mods",
+  "keywords": ["sound", "notification", "status", "ambience", "mod"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "volume": {
+      "type": "string",
+      "title": "Volume",
+      "description": "How loud the sounds play",
+      "default": "normal",
+      "options": ["low", "normal", "high"]
+    },
+    "notifyAfter": {
+      "type": "string",
+      "title": "Notify after",
+      "description": "Send a system notification when a turn that ran this many seconds ends",
+      "default": "60",
+      "options": ["30", "60", "120", "300", "off"]
+    }
+  }
+}
