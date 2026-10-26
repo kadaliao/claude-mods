@@ -53,7 +53,7 @@ claude plugin install ambience@kadaliao
 | 命令 | 作用 |
 | --- | --- |
 | `/ambience` | 显示当前设置 |
-| `/ambience mute` / `unmute` | 关掉 / 打开声音 |
+| `/ambience off` / `on` | 关掉 / 打开声音（也可以用 `mute` / `unmute`） |
 | `/ambience report off` / `report on` | 隐藏 / 显示战报 |
 | `/ambience demo` | 所有音效各放一遍 |
 

@@ -1,6 +1,6 @@
 {
   "name": "ambience",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sounds for what Claude does (commands, edits, tests, commits, a finished turn), a notification after a long turn, and a live tally of the turn's work under the prompt",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/ambience",

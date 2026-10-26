@@ -144,6 +144,26 @@ test('/ambience mute keeps it quiet', async ($, on) => {
   expect(played).toEqual([])
 })
 
+test('/ambience off and on switch the sounds', async ($, on) => {
+  const { played, clock } = world(on)
+  await start($)
+  const run = (args: string) =>
+    $.command.run({ command: 'ambience', args, origin: { kind: 'composer' }, presentation: PRESENTATION })
+  const off = await run('off')
+  expect(off.text).toContain('sounds muted')
+  expect(off.text).not.toContain('unknown')
+  await $.tool.call({ tool: 'Write', file_path: '/r/b.ts', content: 'x' })
+  await clock.settle()
+  expect(played).toEqual([])
+  const back = await run('on')
+  expect(back.text).toContain('sounds on')
+  expect(back.text).not.toContain('unknown')
+  await clock.advance(1_000)
+  await $.tool.call({ tool: 'Write', file_path: '/r/c.ts', content: 'y' })
+  await clock.settle()
+  expect(played).toEqual(['sounds/pop.wav'])
+})
+
 test('/ambience report off clears the status line', async ($, on) => {
   const { status, clock } = world(on)
   await start($)

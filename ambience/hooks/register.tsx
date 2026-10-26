@@ -154,8 +154,8 @@ export const register: Register = (on, options) => {
     const started = await next(e)
     await $.command.register({
       name: 'ambience',
-      description: 'Sounds and the turn tally: mute, unmute, report on|off, demo',
-      argumentHint: '[mute|unmute|report on|report off|demo]',
+      description: 'Sounds and the turn tally: on, off, report on|off, demo',
+      argumentHint: '[on|off|report on|report off|demo]',
     })
     const saved = (await $.store.get('prefs')) as Partial<Prefs> | undefined
     if (saved !== undefined) await update($, prefs, p => ({ ...p, ...saved }))
@@ -173,9 +173,9 @@ export const register: Register = (on, options) => {
       return { text: 'ambience: click · pop · commit · fanfare · fail · chime' }
     }
     const change: Partial<Prefs> =
-      arg === 'mute' || arg === 'sound off'
+      arg === 'off' || arg === 'mute' || arg === 'sound off'
         ? { isMuted: true }
-        : arg === 'unmute' || arg === 'sound on'
+        : arg === 'on' || arg === 'unmute' || arg === 'sound on'
           ? { isMuted: false }
           : arg === 'report on'
             ? { isReportOn: true }

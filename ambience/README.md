@@ -58,7 +58,7 @@ statusline already shows (tokens and cost).
 | Command | What it does |
 | --- | --- |
 | `/ambience` | Shows the settings |
-| `/ambience mute` / `unmute` | Turns the sounds off or on |
+| `/ambience off` / `on` | Turns the sounds off or on (`mute` / `unmute` work too) |
 | `/ambience report off` / `report on` | Hides or shows the tally |
 | `/ambience demo` | Plays every sound once |
 
