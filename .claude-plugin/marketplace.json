@@ -19,7 +19,7 @@
     {
       "name": "danmaku",
       "source": "./danmaku",
-      "description": "Bilibili-style bullet comments that fly across a side pane, heckling what Claude does as it works"
+      "description": "Bilibili-style bullet comments that fly across a few lanes above the prompt, heckling what Claude does as it works"
     },
     {
       "name": "ambience",

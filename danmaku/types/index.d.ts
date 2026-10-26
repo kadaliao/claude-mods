@@ -1,31 +1,24 @@
-// One comment on screen: where it is in cells and how far it moves each frame.
-export type Item = {
+// One comment, as the hooks module hands it to the lanes; each new one has a higher id.
+export type Comment = {
   id: number
   text: string
-  // Its width in terminal cells.
-  width: number
-  lane: number
-  // The column of its first cell; negative once its head has left the pane.
-  x: number
-  speed: number
   color?: string
   // Sent by the person with /danmaku <text>.
   isMine?: boolean
 }
 
-// A comment waiting for a lane with room.
-export type Pending = { text: string; color?: string; isMine?: boolean }
-
-export type Screen = {
-  items: Item[]
-  pending: Pending[]
+// What the band above the prompt draws from.
+export type Band = {
+  // The latest comments, oldest first: the lanes take the ones they have not seen.
+  comments: Comment[]
+  // The last id given.
   seq: number
-  // Comments shown this session.
-  total: number
+  // Up while Claude works and for a while after the last comment.
+  isShown: boolean
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    danmaku: { screen: Shaped<Screen>; isOn: boolean }
+    danmaku: { band: Shaped<Band>; isOn: boolean }
   }
 }

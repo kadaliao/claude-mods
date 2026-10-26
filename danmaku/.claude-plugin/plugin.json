@@ -1,11 +1,11 @@
 {
   "name": "danmaku",
-  "version": "0.1.0",
-  "description": "Bilibili-style bullet comments that fly across a side pane, heckling what Claude does as it works",
+  "version": "0.2.0",
+  "description": "Bilibili-style bullet comments that fly across a few lanes above the prompt, heckling what Claude does as it works",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/danmaku",
   "repository": "https://github.com/kadaliao/claude-mods",
-  "keywords": ["danmaku", "bilibili", "pane", "fun", "mod"],
+  "keywords": ["danmaku", "bilibili", "band", "fun", "mod"],
   "types": "./types/index.d.ts",
   "userConfig": {
     "model": {
@@ -21,6 +21,13 @@
       "description": "How often the model is asked for comments: low every 8s at most, normal 4s, high 2s",
       "default": "normal",
       "options": ["low", "normal", "high"]
+    },
+    "lanes": {
+      "type": "string",
+      "title": "Lanes",
+      "description": "How many rows the comments fly in above the prompt",
+      "default": "3",
+      "options": ["2", "3", "4"]
     }
   }
 }

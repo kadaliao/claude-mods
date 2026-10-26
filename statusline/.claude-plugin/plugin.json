@@ -1,6 +1,6 @@
 {
   "name": "statusline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A two-row status band: model, folder, git branch, context window, tokens, cache rate, API cost, tokens/s and TTFT",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/statusline",

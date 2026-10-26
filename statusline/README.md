@@ -61,6 +61,7 @@ read with `git status --porcelain=2 --branch` on session start, on each prompt, 
 - Totals survive a hot reload and a resumed session (kept in the plugin store, the latest 50
   sessions). `/clear` starts them over.
 - The band is drawn on the terminal and desktop surfaces; a survey takes its place while it shows.
+  What other mods draw above the prompt (the [danmaku](../danmaku/) lanes, say) stays, above it.
 - Mods (function hooks) are an early-access API of Claude Code and may change between releases.
   Built and tested on Claude Code 2.1.304.
 

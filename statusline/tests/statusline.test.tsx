@@ -167,6 +167,8 @@ test('the band shows every figure', async ($, on) => {
       usage: { input_tokens: 1000, cache_read_input_tokens: 9000, output_tokens: 150 },
     },
   ])
+  // The engine's own band, empty with no survey.
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
   await $.session.start({ cwd: '/home/u/workspace/claude-mods', surface: 'terminal', isInteractive: true })
   await drain($.turn.step(STEP))
 
@@ -197,6 +199,22 @@ test('the band yields to a survey', async ($, on) => {
   expect((await ui.find({ type: 'Text', text: /survey/ }))?.text).toBe('survey')
   expect(await ui.find({ type: 'Text', text: /Opus/ })).toBe(undefined)
   await ui.unmount()
+})
+
+test('the band keeps what the mods beneath draw, above its rows', async ($, on) => {
+  world(on, 'sess-g', [])
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>lanes</Text>
+  })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    const lanes = texts.indexOf('lanes')
+    expect(lanes).toBeGreaterThan(-1)
+    expect(texts.findIndex(t => /Opus/.test(t))).toBeGreaterThan(lanes)
+    await ui.unmount()
+  }
 })
 
 test('formatting', () => {

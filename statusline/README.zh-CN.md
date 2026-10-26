@@ -50,7 +50,7 @@ claude plugin install statusline@kadaliao
 
 - token 总数统计的是对话循环（主会话和子代理）发出的模型请求。循环之外的请求（压缩、标题生成、其他插件的 `$.model.complete`）算进了费用，但不算进 token 总数。
 - 总数在热重载和恢复会话（resume）后保留（存在插件 store 里，保留最近 50 个会话）。`/clear` 会清零。
-- 只在终端和桌面端绘制；有调查问卷时让位给问卷。
+- 只在终端和桌面端绘制；有调查问卷时让位给问卷。别的 mod 画在输入框上方的内容（比如 [danmaku](../danmaku/) 的弹幕轨道）会保留，放在状态栏上面。
 - mod（function hooks）是 Claude Code 的 early access API，版本之间可能变化。在 Claude Code 2.1.304 上构建和测试。
 
 ## 开发

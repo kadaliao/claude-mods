@@ -1,59 +1,43 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import type { Item, Screen } from '../types'
-import {
-  MAX_CELLS,
-  buildPrompt,
-  cellsOf,
-  charCells,
-  describe,
-  freeLane,
-  layoutLane,
-  parseDanmaku,
-  placePending,
-  reactionTo,
-  step,
-} from '../hooks/register'
+import type { Band } from '../types'
+import { MAX_CELLS, addComments, buildPrompt, describe, parseDanmaku, reactionTo } from '../hooks/register'
+import type { Flying, Lanes } from '../hooks/screen'
+import { cellsOf, charCells, freeLane, layoutLane, place, step } from '../hooks/screen'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const PRESENTATION = { isFullscreen: true, columns: 160 } as const
-const NB = ' '
+const NB = '\u00a0'
+const HECKLE = /前方高能|危险操作|手别抖|高能预警/
 
-const PANE = {
+const BAND = {
   plugin: 'danmaku',
-  component: 'Pane',
-  requestId: 'danmaku',
+  component: 'AbovePrompt',
   props: {
-    title: '弹幕',
-    isFocused: false,
-    bodyColumns: 41,
-    placement: 'dock',
-    scroll: { offset: 0, bodyRows: 10 },
+    hasSurvey: false,
+    isWorking: true,
+    maxRows: 20,
+    bodyColumns: 60,
+    scroll: { offset: 0, bodyRows: 20 },
     view: {},
   },
+  viewport: { columns: 65, rows: 40 },
 } as const
+const IDLE = { ...BAND, props: { ...BAND.props, isWorking: false } }
 
-const item = (over: Partial<Item>): Item => ({ id: 1, text: 'ab', width: 2, lane: 0, x: 0, speed: 1, ...over })
+const fly = (over: Partial<Flying>): Flying => ({ id: 1, text: 'ab', width: 2, lane: 0, x: 0, speed: 1, ...over })
 const text = (runs: Array<{ text: string }>) => runs.map(r => r.text).join('')
 
-// The engine beneath the plugin: a clock, a store (the pane switched on, unless
-// `stored` says otherwise), a placed pane, and a model that answers `reply`.
+// The engine beneath the plugin: a clock, a store (switched on, unless `stored` says
+// otherwise), a model that answers `reply`, and a band that holds a status row.
 function world(on: On, reply = '前排\n这波操作', stored: Record<string, unknown> = { isOn: true }) {
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.store(on, stored)
   const prompts: string[] = []
-  const opened: string[] = []
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: 'danmaku' } }))
-  on('ui.open', (_, e) => {
-    opened.push(e.id)
-    return { value: { isPlaced: true } }
-  })
   on('ui.close', () => ({ value: undefined }))
-  on('ui.panes', () => ({
-    value: [{ id: 'danmaku', title: '弹幕', isShown: true, isFocused: false, isPlaced: true }],
-  }))
   on('model.complete', (_, e) => {
     prompts.push(e.prompt)
     return {
@@ -65,9 +49,17 @@ function world(on: On, reply = '前排\n这波操作', stored: Record<string, un
     }
   })
   on('tool.call', () => ({ result: {} }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
-  return { clock, prompts, opened }
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>status</Text>
+  })
+  return { clock, prompts }
 }
+
+const run = (args: string) => ({ command: 'danmaku', args, origin: { kind: 'composer' }, presentation: PRESENTATION }) as const
+const done = { answer: 'done', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' } as const
 
 test('counts cells: CJK and emoji take two', () => {
   expect(charCells('a')).toBe(1)
@@ -79,33 +71,45 @@ test('counts cells: CJK and emoji take two', () => {
 })
 
 test('lays out a lane, cut at both edges', () => {
-  expect(text(layoutLane([item({ x: 2 })], 6))).toBe(`${NB}${NB}ab`)
+  expect(text(layoutLane([fly({ x: 2 })], 6))).toBe(`${NB}${NB}ab`)
   // Half of 中 is past the left edge: blank, then 文.
-  expect(text(layoutLane([item({ text: '中文', width: 4, x: -1 })], 6))).toBe(`${NB}文`)
+  expect(text(layoutLane([fly({ text: '中文', width: 4, x: -1 })], 6))).toBe(`${NB}文`)
   // 中 would straddle the right edge: nothing to draw.
-  expect(layoutLane([item({ text: '中', width: 2, x: 5 })], 6)).toEqual([])
-  const colored = layoutLane([item({ x: 0, color: 'success' }), item({ id: 2, text: 'cd', x: 3 })], 6)
+  expect(layoutLane([fly({ text: '中', width: 2, x: 5 })], 6)).toEqual([])
+  const colored = layoutLane([fly({ x: 0, color: 'success' }), fly({ id: 2, text: 'cd', x: 3 })], 6)
   expect(colored).toEqual([{ text: 'ab', color: 'success' }, { text: `${NB}cd` }])
 })
 
 test('a lane is free once the comment ahead has moved on, and only if it is not caught', () => {
   const geo = { cols: 40, lanes: 3 }
-  expect(freeLane([item({ x: 38, width: 4 })], geo, 1)).toBe(1)
-  expect(freeLane([item({ x: 10, width: 4, speed: 1 })], geo, 1)).toBe(0)
+  expect(freeLane([fly({ x: 38, width: 4 })], geo, 1)).toBe(1)
+  expect(freeLane([fly({ x: 10, width: 4, speed: 1 })], geo, 1)).toBe(0)
   // A much faster comment would catch the slow one ahead: another lane.
-  expect(freeLane([item({ x: 20, width: 10, speed: 0.2 })], geo, 3)).toBe(1)
+  expect(freeLane([fly({ x: 20, width: 10, speed: 0.2 })], geo, 3)).toBe(1)
 })
 
-test('a frame moves comments left, drops those gone, and places those waiting', () => {
+test('a frame moves comments left, drops those gone, and takes the new ones', () => {
   const geo = { cols: 20, lanes: 2 }
-  const s: Screen = { items: [item({ x: 0.5, width: 2, speed: 3 })], pending: [{ text: '前排' }], seq: 1, total: 1 }
-  const next = step(s, geo)
+  const s: Lanes = { items: [fly({ x: 0.5, width: 2, speed: 3 })], pending: [], seen: 1 }
+  const next = step(s, [{ id: 1, text: 'ab' }, { id: 2, text: '前排' }], geo)
   expect(next.items.map(i => i.text)).toEqual(['前排'])
   expect(next.items[0]?.x).toBe(20)
-  expect(next.total).toBe(2)
+  expect(next.seen).toBe(2)
+  // Seen already: not taken twice.
+  expect(step(next, [{ id: 2, text: '前排' }], geo).items).toHaveLength(1)
   // No lane has room: it waits.
-  const full = placePending({ ...next, pending: [{ text: 'x' }] }, { cols: 20, lanes: 1 })
-  expect(full.pending).toEqual([{ text: 'x' }])
+  const full = place(next, [{ id: 3, text: 'x' }], { cols: 20, lanes: 1 })
+  expect(full.pending).toEqual([{ id: 3, text: 'x' }])
+})
+
+test('new comments take the next ids, the latest few kept', () => {
+  const b: Band = { comments: [], seq: 5, isShown: false }
+  const added = addComments(b, [{ text: 'a' }, { text: 'b', color: 'error' }])
+  expect(added).toEqual({ comments: [{ text: 'a', id: 6 }, { text: 'b', color: 'error', id: 7 }], seq: 7, isShown: true })
+  let many = b
+  for (let i = 0; i < 30; i++) many = addComments(many, [{ text: String(i) }])
+  expect(many.comments.length).toBeLessThan(30)
+  expect(many.comments.at(-1)).toEqual({ text: '29', id: 35 })
 })
 
 test('reads the comments out of a reply', () => {
@@ -128,63 +132,143 @@ test('describes a call in a few words for the model', () => {
   expect(buildPrompt(['a'], ['前排'])).toContain('最近的弹幕：前排')
 })
 
-test('an rm -rf flies across the pane, on every surface', async ($, on) => {
-  const { clock, opened } = world(on)
+test('an rm -rf flies across the lanes above the prompt, on every surface', async ($, on) => {
+  const { clock } = world(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  expect(opened).toEqual(['danmaku'])
   for (const surface of SURFACES) {
-    const ui = await $.ui.mount({ ...PANE, surface })
+    const ui = await $.ui.mount({ ...BAND, surface })
     await $.tool.call({ tool: 'Bash', command: 'rm -rf build' })
-    await clock.advance(2500)
-    expect(await ui.find({ type: 'Text', text: /前方高能|危险操作|手别抖|高能预警/ })).toBeDefined()
+    await clock.advance(100)
+    await ui.advance(2000)
+    expect(await ui.find({ type: 'Text', text: HECKLE, in: 'lanes' })).toBeDefined()
+    // It flies on, and is gone once it has crossed.
+    await ui.advance(12_000)
+    expect(await ui.find({ type: 'Text', text: HECKLE, in: 'lanes' })).toBeUndefined()
     await ui.unmount()
-    await clock.advance(10_000)
   }
+})
+
+test('the lanes sit above what else the band holds', async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.drawn()).toMatchObject({
+    type: 'Box',
+    children: [{ type: 'Client', props: { key: 'lanes', height: 3 } }, { type: 'Text' }],
+  })
+  await ui.unmount()
 })
 
 test("the model's comments join in once a few things have happened", async ($, on) => {
   const { clock, prompts } = world(on, '这波操作\n好家伙')
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await $.tool.call({ tool: 'Read', file_path: '/r/a.ts' })
   await $.tool.call({ tool: 'Read', file_path: '/r/b.ts' })
   await $.tool.call({ tool: 'Edit', file_path: '/r/a.ts', old_string: 'a', new_string: 'b' })
   await clock.advance(3000)
   expect(prompts.length).toBe(1)
   expect(prompts[0]).toContain('Claude 在读 a.ts')
-  expect(await ui.find({ type: 'Text', text: /这波操作/ })).toBeDefined()
+  await ui.advance(1000)
+  expect(await ui.find({ type: 'Text', text: /这波操作/, in: 'lanes' })).toBeDefined()
   await ui.unmount()
 })
 
-test('switched off, nothing is asked and nothing flies', async ($, on) => {
+test('the lanes fold a while after the last comment, once Claude is idle', async ($, on) => {
+  const { clock } = world(on, '')
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...IDLE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Client' })).toBeUndefined()
+  await $.turn.start({ text: '', turnId: 't1' })
+  expect(await ui.find({ type: 'Client' })).toBeDefined()
+  // Working: they stay up, however long.
+  await clock.advance(60_000)
+  expect(await ui.find({ type: 'Client' })).toBeDefined()
+  await $.turn.complete(done)
+  await clock.advance(5000)
+  expect(await ui.find({ type: 'Client' })).toBeDefined()
+  await clock.advance(10_000)
+  expect(await ui.find({ type: 'Client' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('switched off, nothing is asked and nothing is drawn', async ($, on) => {
   const { clock, prompts } = world(on, '前排', {})
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await $.tool.call({ tool: 'Bash', command: 'rm -rf build' })
-  await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+  await $.turn.complete(done)
   await clock.advance(5000)
   expect(prompts).toEqual([])
-  expect(await ui.find({ type: 'Text', text: /前方高能|危险操作|手别抖|高能预警/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Client' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('status')
   await ui.unmount()
 })
 
-test('/danmaku <text> sends your own comment, and /danmaku off closes the pane', async ($, on) => {
-  const { clock } = world(on, '', {})
+test('/danmaku switches on with a comment, /danmaku <text> sends yours, /danmaku off folds the lanes', async ($, on) => {
+  world(on, '', {})
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  const sent = await $.command.run({ command: 'danmaku', args: '主播好帅', origin: { kind: 'composer' }, presentation: PRESENTATION })
-  expect(sent.text).toBe('弹幕已发送。')
-  await clock.advance(3000)
-  expect(await ui.find({ type: 'Text', text: /主播好帅/ })).toBeDefined()
-  const off = await $.command.run({ command: 'danmaku', args: 'off', origin: { kind: 'composer' }, presentation: PRESENTATION })
-  expect(off.text).toBe('弹幕已关闭。')
+  const ui = await $.ui.mount({ ...IDLE, surface: 'terminal' })
+  expect((await $.command.run(run(''))).text).toContain('弹幕已开启')
+  await ui.advance(1000)
+  expect(await ui.find({ type: 'Text', text: /前排占座|来了来了|弹幕护体/, in: 'lanes' })).toBeDefined()
+  expect((await $.command.run(run('主播好帅'))).text).toBe('弹幕已发送。')
+  await ui.advance(1000)
+  expect(await ui.find({ type: 'Text', text: /主播好帅/, in: 'lanes' })).toBeDefined()
+  expect((await $.command.run(run('off'))).text).toBe('弹幕已关闭。')
+  expect(await ui.find({ type: 'Client' })).toBeUndefined()
   await ui.unmount()
 })
 
-test('an empty pane says so, and a screen an earlier version stored is declined', async ($, on) => {
-  on('state.get', () => ({ value: { value: { items: [{ text: 'old' }] }, version: 1 } }))
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /Claude 一干活这里就热闹了/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /0 条弹幕/ })).toBeDefined()
+test('a band an earlier version stored is declined', async ($, on) => {
+  world(on)
+  on('state.get', (_, e, next) =>
+    e.key === 'band' ? { value: { value: { items: [{ text: 'old' }] }, version: 1 } } : next(e),
+  )
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...IDLE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Client' })).toBeUndefined()
   await ui.unmount()
+})
+
+test('with no band drawn anywhere (a claude -p run), the model is never asked', async ($, on) => {
+  const { clock, prompts } = world(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+  await $.tool.call({ tool: 'Read', file_path: '/r/a.ts' })
+  await $.tool.call({ tool: 'Read', file_path: '/r/b.ts' })
+  await $.tool.call({ tool: 'Read', file_path: '/r/c.ts' })
+  await $.turn.complete(done)
+  await clock.advance(10_000)
+  expect(prompts).toEqual([])
+})
+
+test('the lanes option sets the rows, and a short band gives way', { options: { lanes: '2' } }, async ($, on) => {
+  world(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ type: 'Client' }))?.props).toMatchObject({ height: 2 })
+  await ui.unmount()
+  const short = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 4 }, surface: 'terminal' })
+  expect((await short.find({ type: 'Client' }))?.props).toMatchObject({ height: 1 })
+  await short.unmount()
+  const tiny = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 3 }, surface: 'terminal' })
+  expect(await tiny.find({ type: 'Client' })).toBeUndefined()
+  await tiny.unmount()
+})
+
+test('two surfaces drawing at once each fly their own lanes', async ($, on) => {
+  const { clock } = world(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const term = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await $.tool.call({ tool: 'Bash', command: 'rm -rf build' })
+  await clock.advance(100)
+  await term.advance(2000)
+  await desk.advance(2000)
+  for (const ui of [term, desk]) expect(await ui.find({ type: 'Text', text: HECKLE, in: 'lanes' })).toBeDefined()
+  await term.advance(12_000)
+  expect(await term.find({ type: 'Text', text: HECKLE, in: 'lanes' })).toBeUndefined()
+  expect(await desk.find({ type: 'Text', text: HECKLE, in: 'lanes' })).toBeDefined()
+  await term.unmount()
+  await desk.unmount()
 })

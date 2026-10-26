@@ -235,7 +235,9 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+    // What the mods beneath draw (danmaku's lanes, say) stays, above the two rows.
+    const below = await next(e)
+    if (e.props.hasSurvey) return below
     const { Box, Text } = $.ui.resolve(e)
 
     const [id, saved, repo, usage, sessionModel, cwd] = await Promise.all([
@@ -263,6 +265,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {below}
         <Box flexWrap="wrap" columnGap={3}>
           <Text>
             <Text color="claude" bold>

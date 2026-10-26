@@ -1,30 +1,31 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Item, Pending, Screen } from '../types'
+import type { Band, Comment } from '../types'
+import { CROSS_MS, cutCells } from './screen'
 
-// Bullet comments, Bilibili style, flying right to left across a pane while Claude works:
+// Bullet comments, Bilibili style, flying right to left in a few lanes above the prompt
+// while Claude works:
 //
-//   ┌ 弹幕 ──────────────────────────────────────┐
-//   │        前排            666                  │
-//   │   又在 grep 了                 前方高能！！ │
-//   │                  这波操作有点东西           │
-//   │ 23 条弹幕 · haiku                           │
-//   └─────────────────────────────────────────────┘
+//         前排            666
+//    又在 grep 了                    前方高能！！
+//                  这波操作有点东西
+//   ✦ Opus 5.5 high   claude-mods ⎇ main        (another mod's band, if any)
+//   > _
 //
-// Some comments come at once from a table of reactions (a `rm -rf`, a failing test);
-// the rest come from a small model, asked every few seconds about what just happened.
+// The lanes show while Claude works and for a while after the last comment, then fold
+// away. Some comments come at once from a table of reactions (a `rm -rf`, a failing
+// test); the rest come from a small model, asked every few seconds about what just
+// happened. The comments move on the surface's own frame clock (screen.tsx): this
+// module only hands it each new one.
 
-const PANE = 'danmaku'
-const TITLE = '弹幕'
-const FRAME_MS = 125
-// Every comment takes about this long to cross the pane, so a long one moves faster.
-const CROSS_MS = 7000
-// Cells kept clear behind the comment ahead in a lane.
-const LANE_GAP = 4
-const MAX_LANES = 12
-const INLINE_LANES = 5
-const MAX_PENDING = 20
+const LANES: Record<string, number> = { '2': 2, '3': 3, '4': 4 }
+// Rows of the band left to what other mods draw there before the lanes give way.
+const ROOM_FOR_OTHERS = 3
+// Once Claude is idle the lanes fold this long after the last comment.
+const LINGER_MS = CROSS_MS + 3000
+// Comments handed to the lanes: enough for a burst, few enough to replay after a reload.
+const MAX_KEPT = 12
 // A comment is cut to this many cells.
 export const MAX_CELLS = 30
 // The model is asked once this many things have happened, or this long after the first.
@@ -36,148 +37,21 @@ const RECENT = 10
 const TIMEOUT_MS = 20_000
 // Most comments are plain, as on Bilibili; some are colored.
 const PALETTE = [undefined, undefined, undefined, undefined, 'claude', 'ide', 'merged', 'suggestion', 'warning', 'success']
-const NBSP = ' '
+const HELLO = ['前排占座', '来了来了', '弹幕护体！']
+// The side pane of version 0.1, which a session that reloads into this one may still show.
+const OLD_PANE = 'danmaku'
 
-const emptyScreen: Screen = { items: [], pending: [], seq: 0, total: 0 }
-const screen = atom({ plugin: 'danmaku', key: 'screen' } as const, emptyScreen, { shape: 'screen-1' })
+const emptyBand: Band = { comments: [], seq: 0, isShown: false }
+const band = atom({ plugin: 'danmaku', key: 'band' } as const, emptyBand, { shape: 'band-1' })
 const isOn = atom({ plugin: 'danmaku', key: 'isOn' } as const, false)
 
-// --- cells ------------------------------------------------------------------------
+export type NewComment = Omit<Comment, 'id'>
 
-// Wide East Asian letters and full-width punctuation, two terminal cells each.
-const WIDE =
-  /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/
-
-export function charCells(ch: string): number {
-  const cp = ch.codePointAt(0) ?? 0
-  // Joiners, variation selectors and combining marks ride on the letter before.
-  if (cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x300 && cp <= 0x36f)) return 0
-  if (cp >= 0x1f000) return 2
-  return WIDE.test(ch) ? 2 : 1
-}
-
-export function cellsOf(s: string): number {
-  let n = 0
-  for (const ch of s) n += charCells(ch)
-  return n
-}
-
-export function cutCells(s: string, room: number): string {
-  let used = 0
-  let out = ''
-  for (const ch of s) {
-    const w = charCells(ch)
-    if (used + w > room) break
-    used += w
-    out += ch
-  }
-  return out
-}
-
-// --- the screen -------------------------------------------------------------------
-
-export type Geo = { cols: number; lanes: number }
-export type Run = { text: string; color?: string; isMine?: boolean }
-
-const frames = () => CROSS_MS / FRAME_MS
-
-// The first lane, from the top, where a comment of this speed starting at the right
-// edge has room and never catches up with the one ahead before that one is gone.
-export function freeLane(items: readonly Item[], geo: Geo, speed: number): number | undefined {
-  for (let lane = 0; lane < geo.lanes; lane++) {
-    const isFree = items.every(a => {
-      if (a.lane !== lane) return true
-      const tail = a.x + a.width
-      if (tail > geo.cols - LANE_GAP) return false
-      return speed <= a.speed || geo.cols / speed >= tail / a.speed
-    })
-    if (isFree) return lane
-  }
-  return undefined
-}
-
-// Puts what waits into lanes with room; the rest keeps waiting, newest kept.
-export function placePending(s: Screen, geo: Geo): Screen {
-  let { items, seq, total } = s
-  const left: Pending[] = []
-  for (const p of s.pending) {
-    const width = cellsOf(p.text)
-    const speed = (geo.cols + width) / frames()
-    const lane = freeLane(items, geo, speed)
-    if (lane === undefined) {
-      left.push(p)
-      continue
-    }
-    seq += 1
-    total += 1
-    const item: Item = { id: seq, text: p.text, width, lane, x: geo.cols, speed }
-    if (p.color !== undefined) item.color = p.color
-    if (p.isMine) item.isMine = true
-    items = [...items, item]
-  }
-  return { items, pending: left.slice(-MAX_PENDING), seq, total }
-}
-
-// One frame: every comment moves left, those gone past the left edge leave, and
-// waiting ones take the room.
-export function step(s: Screen, geo: Geo): Screen {
-  const items = s.items.map(it => ({ ...it, x: it.x - it.speed })).filter(it => it.x + it.width > 0)
-  return placePending({ ...s, items }, geo)
-}
-
-type Cell = { ch: string; color?: string; isMine?: boolean; isTail?: boolean }
-
-// One lane as styled runs `cols` cells wide: each comment at its column, cut at both
-// edges; half a wide letter at an edge is left blank.
-export function layoutLane(items: readonly Item[], cols: number): Run[] {
-  const cells: Array<Cell | undefined> = new Array(cols).fill(undefined)
-  for (const item of [...items].sort((a, b) => a.x - b.x)) {
-    let p = Math.floor(item.x)
-    let last = -1
-    for (const ch of item.text) {
-      const w = charCells(ch)
-      if (w === 0) {
-        const head = cells[last]
-        if (last >= 0 && head !== undefined) head.ch += ch
-        continue
-      }
-      if (p >= 0 && p + w <= cols) {
-        // Writing over the second half of a wide letter blanks its first half.
-        if (cells[p]?.isTail && p > 0) cells[p - 1] = undefined
-        cells[p] = { ch, color: item.color, isMine: item.isMine }
-        if (w === 2) cells[p + 1] = { ch: '', color: item.color, isMine: item.isMine, isTail: true }
-        last = p
-      }
-      p += w
-    }
-  }
-
-  const runs: Run[] = []
-  for (const cell of cells) {
-    const ch = cell === undefined ? NBSP : cell.ch
-    const color = cell?.color
-    const isMine = cell?.isMine
-    const prev = runs[runs.length - 1]
-    if (prev && prev.color === color && prev.isMine === isMine) prev.text += ch
-    else {
-      const run: Run = { text: ch }
-      if (color !== undefined) run.color = color
-      if (isMine !== undefined) run.isMine = isMine
-      runs.push(run)
-    }
-  }
-  // Blank runs at the end draw nothing.
-  while (runs.length > 0) {
-    const tail = runs[runs.length - 1]
-    if (tail === undefined || tail.color !== undefined || tail.isMine !== undefined) break
-    const trimmed = tail.text.replace(/ +$/, '')
-    if (trimmed !== '') {
-      tail.text = trimmed
-      break
-    }
-    runs.pop()
-  }
-  return runs
+// The comments with the next ids after the band's, the latest few kept; the lanes show.
+export function addComments(b: Band, list: readonly NewComment[]): Band {
+  let seq = b.seq
+  const added = list.map(c => ({ ...c, id: ++seq }))
+  return { comments: [...b.comments, ...added].slice(-MAX_KEPT), seq, isShown: true }
 }
 
 // --- what happened ------------------------------------------------------------------
@@ -315,40 +189,51 @@ export function parseDanmaku(reply: string): string[] {
   return out.slice(0, 3)
 }
 
+
 // --- running it -------------------------------------------------------------------------
 
 // Set by `register` from the options; the rest is the module's own and starts over
 // on a reload, which loses nothing worth keeping.
 let model = 'haiku'
 let intervalMs = INTERVAL_MS.normal ?? 4000
-let geo: Geo = { cols: 40, lanes: 8 }
-let ticker: Timer | undefined
+let lanes = 3
 let flushTimer: Timer | undefined
+let hideTimer: Timer | undefined
 let queue: string[] = []
 let isAsking = false
 let lastAskedAt = -Infinity
 let recent: string[] = []
+let isTurnRunning = false
+// Whether a surface draws the band: with none (a `claude -p` run) the model is never asked.
+let isDrawn = false
 
 const pick = <T,>(list: readonly T[]): T | undefined => list[Math.floor(Math.random() * list.length)]
 
-async function tick($: EngineInterface): Promise<void> {
-  const s = await update($, screen, cur => step(cur, geo))
-  if (s !== null && s.items.length === 0 && s.pending.length === 0) {
-    ticker?.cancel()
-    ticker = undefined
-  }
+function cancelHide(): void {
+  hideTimer?.cancel()
+  hideTimer = undefined
 }
 
-function startTicker($: EngineInterface): void {
-  if (ticker !== undefined) return
-  ticker = $.clock.every(FRAME_MS, () => void tick($).catch(() => {}))
+// Folds the lanes a while from now, unless Claude is working by then.
+function scheduleHide($: EngineInterface): void {
+  cancelHide()
+  hideTimer = $.clock.after(LINGER_MS, () => {
+    hideTimer = undefined
+    if (isTurnRunning) return
+    void update($, band, b => ({ ...b, comments: [], isShown: false })).catch(() => {})
+  })
 }
 
-async function spawn($: EngineInterface, list: readonly Pending[]): Promise<void> {
+async function show($: EngineInterface): Promise<void> {
+  if (!(await read($, isOn)) || (await read($, band)).isShown) return
+  await update($, band, b => ({ ...b, isShown: true }))
+}
+
+async function spawn($: EngineInterface, list: readonly NewComment[]): Promise<void> {
   if (list.length === 0 || !(await read($, isOn))) return
-  recent = [...recent, ...list.map(p => p.text)].slice(-RECENT)
-  await update($, screen, s => placePending({ ...s, pending: [...s.pending, ...list] }, geo))
-  startTicker($)
+  recent = [...recent, ...list.map(c => c.text)].slice(-RECENT)
+  await update($, band, b => addComments(b, list))
+  if (!isTurnRunning) scheduleHide($)
 }
 
 async function react($: EngineInterface, h: Happening): Promise<void> {
@@ -367,15 +252,10 @@ function schedule($: EngineInterface, ms: number): void {
   })
 }
 
-async function isShowing($: EngineInterface): Promise<boolean> {
-  if (!(await read($, isOn))) return false
-  return (await $.ui.panes()).some(p => p.id === PANE && p.isPlaced)
-}
-
 async function flush($: EngineInterface): Promise<void> {
   if (isAsking || queue.length === 0) return
-  // Nobody sees the pane: ask nothing, and let what happened go.
-  if (!(await isShowing($))) {
+  // Nobody sees the lanes: ask nothing, and let what happened go.
+  if (!isDrawn || !(await read($, isOn))) {
     queue = []
     return
   }
@@ -423,10 +303,9 @@ async function setOn($: EngineInterface, value: boolean): Promise<void> {
   await update($, isOn, () => value)
   await $.store.set('isOn', value)
   if (!value) {
-    ticker?.cancel()
-    ticker = undefined
+    cancelHide()
     queue = []
-    await update($, screen, s => ({ ...s, items: [], pending: [] }))
+    await update($, band, b => ({ ...b, comments: [], isShown: false }))
   }
 }
 
@@ -435,19 +314,19 @@ async function setOn($: EngineInterface, value: boolean): Promise<void> {
 export const register: Register = (on, options) => {
   model = typeof options.model === 'string' && options.model !== '' ? options.model : 'haiku'
   intervalMs = INTERVAL_MS[String(options.density)] ?? INTERVAL_MS.normal ?? 4000
+  lanes = LANES[String(options.lanes)] ?? 3
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     await $.command.register({
       name: 'danmaku',
-      description: 'Bullet comments about what Claude does: toggle the pane, or send one of your own',
+      description: 'Bullet comments above the prompt about what Claude does: switch them on or off, or send one of your own',
       argumentHint: '[on|off|<your comment>]',
     })
-    if ((await $.store.get('isOn')) === true) {
-      await update($, isOn, () => true)
-      // Unasked, the pane waits for a terminal wide enough to sit beside the chat.
-      void $.ui.open({ id: PANE, title: TITLE }).catch(() => {})
-    }
+    void $.ui.close({ id: OLD_PANE }).catch(() => {})
+    if ((await $.store.get('isOn')) === true) await update($, isOn, () => true)
+    // A reload dropped the timer that would have folded the lanes.
+    if ((await read($, band)).isShown) scheduleHide($)
     return started
   })
 
@@ -456,25 +335,23 @@ export const register: Register = (on, options) => {
     const word = arg.toLowerCase()
     if (word === 'off' || (word === '' && (await read($, isOn)))) {
       await setOn($, false)
-      await $.ui.close({ id: PANE }).catch(() => {})
       return { text: '弹幕已关闭。' }
     }
     await setOn($, true)
-    const opened = await $.ui.open({ id: PANE, title: TITLE })
-    const isMine = arg !== '' && word !== 'on'
-    if (isMine) await spawn($, [{ text: cutCells(arg.replace(/\s+/g, ' '), MAX_CELLS), color: 'claude', isMine: true }])
-    if (!opened.isPlaced) return { text: `弹幕已开启，面板还没显示：${opened.reason}` }
-    return { text: isMine ? '弹幕已发送。' : '弹幕已开启。' }
+    if (arg !== '' && word !== 'on') {
+      await spawn($, [{ text: cutCells(arg.replace(/\s+/g, ' '), MAX_CELLS), color: 'claude', isMine: true }])
+      return { text: '弹幕已发送。' }
+    }
+    // One comment at once, so the lanes show where they are.
+    await spawn($, [{ text: pick(HELLO) ?? HELLO[0] ?? '前排' }])
+    return { text: '弹幕已开启：Claude 干活时从输入框上方飘过。' }
   })
-
-  // The person's close mark turns it off, so the next session does not open it again.
-  on('ui.close', async ($, e, next) => {
-    if (e.id === PANE && e.origin.kind === 'person') await setOn($, false)
-    return next(e)
-  }).catch(($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
+      isTurnRunning = true
+      cancelHide()
+      void show($).catch(() => {})
       void react($, { kind: 'start' }).catch(() => {})
       if (e.text.trim() !== '') void enqueue($, `主播对 Claude 说：${short(e.text, 80)}`).catch(() => {})
     }
@@ -499,6 +376,8 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined) {
+      isTurnRunning = false
+      scheduleHide($)
       void react($, { kind: 'done', reason: e.reason, durationMs: e.durationMs }).catch(() => {})
       const said = e.answer.trim() === '' ? '' : `：${short(e.answer, 120)}`
       void enqueue($, `Claude 这轮干完了${said}`, true).catch(() => {})
@@ -506,53 +385,26 @@ export const register: Register = (on, options) => {
     return done
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
-    const s = await read($, screen)
-    const cols = Math.max(12, e.props.bodyColumns - 1)
-    const lanes =
-      e.props.placement === 'inline' ? INLINE_LANES : Math.max(1, Math.min(MAX_LANES, e.props.scroll.bodyRows - 2))
-    geo = { cols, lanes }
-
-    const rows = []
-    for (let lane = 0; lane < lanes; lane++) {
-      const runs = layoutLane(
-        s.items.filter(it => it.lane === lane),
-        cols,
-      )
-      rows.push(
-        <Text wrap="truncate">
-          {runs.length === 0
-            ? NBSP
-            : runs.map(run =>
-                run.color !== undefined || run.isMine ? (
-                  <Text color={run.color} bold={run.isMine} underline={run.isMine}>
-                    {run.text}
-                  </Text>
-                ) : (
-                  run.text
-                ),
-              )}
-        </Text>,
-      )
-    }
-    if (s.items.length === 0 && s.total === 0) {
-      const hint = 'Claude 一干活这里就热闹了'
-      const pad = NBSP.repeat(Math.max(0, Math.floor((cols - cellsOf(hint)) / 2)))
-      rows[Math.floor((lanes - 1) / 2)] = (
-        <Text dimColor wrap="truncate">
-          {pad}
-          {hint}
-        </Text>
-      )
-    }
-
+  // The lanes go above whatever else the band holds (another mod's status line), which
+  // keeps the row next to the prompt.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const below = await next(e)
+    isDrawn = true
+    if (e.props.hasSurvey || (e.surface !== 'terminal' && e.surface !== 'desktop')) return below
+    const [isOnNow, b] = await Promise.all([read($, isOn), read($, band)])
+    const rows = Math.min(lanes, e.props.maxRows - ROOM_FOR_OTHERS)
+    if (!isOnNow || !(b.isShown || e.props.isWorking) || rows < 1) return below
+    const { Box, Client } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {rows}
-        <Text dimColor wrap="truncate">
-          {s.total} 条弹幕 · {model}
-        </Text>
+        <Client
+          key="lanes"
+          module="./screen.tsx"
+          props={{ comments: b.comments, lanes: rows }}
+          width={e.props.bodyColumns}
+          height={rows}
+        />
+        {below}
       </Box>
     )
   })
