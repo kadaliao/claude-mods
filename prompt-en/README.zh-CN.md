@@ -53,7 +53,7 @@
 prompt 下方那行英文教过你的东西，会收进生词本：
 
 - **英文被纠正或润色过**，收一张「你写的 → 更地道的」卡片：`add timeout → add a timeout（article）`。同样的错再犯一次，这张卡片退回从头复习。
-- **中文 prompt 的译文**，由小模型挑出最多两个值得学的表达：`顺便 → while you're at it`、`兜底 → fall back to`、`过度设计 → over-engineered`；再挑最多一个可以套用的句型，整句背：`先别急着提交，等测试跑完再说 → Hold off on committing until the tests finish.`，句型 `Hold off on ___ until ___`。日常词、人人都会的句型（`Can you ___?`）、技术术语、代码都跳过；挑出来的内容必须在你的原文和译文里都找得到才收，不会收进编造的内容。
+- **中文 prompt 的译文**，由小模型挑出最多两个值得学的表达：`顺便 → while you're at it`、`兜底 → fall back to`、`过度设计 → over-engineered`；再挑最多一个可以套用的句型，整句背：`先别急着提交，等测试跑完再说 → Hold off on committing until the tests finish.`，句型 `Hold off on ___ until ___`。日常词、人人都会的句型（`Can you ___?`）、技术术语、代码都跳过；挑出来的内容必须在你的原文和译文里都找得到才收，不会收进编造的内容；中英两边说的必须是同一件事，不多不少：`制定完善的开发计划 → draw up a solid development plan`，而不是只有 `制定`。
 
 `/vocab import` 把生词本出现之前的 prompt 也导进来：prompt-en 存下的纠错直接收；翻译则用 Claude Code 的输入历史（`~/.claude/history.jsonl`）里的原文去配对存下的译文，每 8 条问一次模型。导入在后台进行，完成后提示收了多少；已经收过的 prompt 不会重复收。
 
@@ -67,6 +67,8 @@ prompt 下方那行英文教过你的东西，会收进生词本：
 
 f: 显示答案   Esc 关闭
 ```
+
+「原句」是这个词在你 prompt 里所在的那一句，「例句」是译文里含答案的那一句，词本身都会标出来，方便两边对照。
 
 按 `f` 显示答案，然后 `1` 忘了、`2` 模糊、`3` 记得（回车就是记得），`x` 删掉这张。记得的卡片每次隔得更久（1、3、7、16、35 天，最后 90 天）；忘了的在这一轮最后再出一次，并从头开始。一轮最多 20 张。有到期卡片时，开新会话会弹一条提示，一天最多两次。`/vocab list` 列出最近收的卡片和每张的熟练度。
 

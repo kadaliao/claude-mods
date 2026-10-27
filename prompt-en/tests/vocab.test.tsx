@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { keyOf } from '../hooks/prompt'
-import { cardId, fromReview, parsePair, parsePicks, pick, schedule } from '../hooks/vocab'
+import { cardId, excerpt, fromReview, parsePair, parsePicks, pick, schedule } from '../hooks/vocab'
 import type { Translation, VocabCard } from '../types'
 
 const USAGE = { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -126,6 +126,45 @@ test('a phrase is kept only where both texts hold it', () => {
     { source: '有点过度设计了', english: 'It is a bit over-engineered.' },
   ])
   expect(hyphened[0]?.[0]?.answer).toBe('over-engineered')
+})
+
+// A prompt whose phrase is in its last sentence, past the first 200 characters.
+const PLAN = '你要先调研、然后制定完善的开发计划，然后跟我沟通确认之后再动手'
+const PLAN_ZH = `我有剧本资源，有 codex 可以生成图片。${'之前的做法我都不喜欢，太简陋，处处穿帮。'.repeat(8)}\n\n${PLAN}`
+const PLAN_EN = `I have a script for the story, and Codex can generate images.${" I didn't like the earlier approaches.".repeat(8)}\n\nFirst, research the options. Then draw up a solid development plan. Then check it with me before building anything.`
+
+test('a phrase card holds the sentences its two sides stand in, not the prompt\'s start', () => {
+  const [found] = parsePicks('PHRASE: 制定完善的开发计划 => draw up a solid development plan', [
+    { source: PLAN_ZH, english: PLAN_EN },
+  ])
+  expect(found).toEqual([
+    {
+      kind: 'phrase',
+      cue: '制定完善的开发计划',
+      answer: 'draw up a solid development plan',
+      context: PLAN,
+      example: 'Then draw up a solid development plan.',
+    },
+  ])
+
+  // English the person typed among their Chinese is no cue; the words around it are.
+  const mixed = { source: '要让人一眼就能 get 到重点', english: 'People should get the point at a glance.' }
+  const reply = 'PHRASE: get => get the point at a glance\nPHRASE: 一眼就能 get 到重点 => get the point at a glance'
+  expect(parsePicks(reply, [mixed])[0]?.map(f => f.cue)).toEqual(['一眼就能 get 到重点'])
+})
+
+test('an excerpt is the sentence that holds the words, cut around them when long', () => {
+  expect(excerpt('First line.\nThen  Draw up\na plan. Next one.', 'draw up a plan')).toBe('Then Draw up a plan.')
+  expect(excerpt('一。二。三。四。', '三。')).toBe('三。')
+  expect(excerpt('一。二。三。四。', '三。', 1)).toBe('二。三。四。')
+  // Not there: the start of the text, as before.
+  expect(excerpt('Nothing here. At all.', 'draw up')).toBe('Nothing here. At all.')
+
+  const long = `${'很长的背景说明，'.repeat(40)}然后制定完善的开发计划，${'再补充一些要求，'.repeat(40)}`
+  const got = excerpt(long, '制定完善的开发计划')
+  expect(got).toContain('制定完善的开发计划')
+  expect(got.startsWith('…') && got.endsWith('…')).toBe(true)
+  expect(got.length).toBeLessThanOrEqual(202)
 })
 
 test('a pattern is a sentence of both texts whose frame is its own words', () => {
@@ -347,6 +386,27 @@ test('a pattern card shows the sentence, then its English and the frame', async 
   await ui.press({ key: 'reveal' })
   expect(await ui.find({ type: 'Text', text: /^Hold off on ___ until ___$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^句型/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a phrase card marks its words in the sentence, and its English in the example', async ($, on) => {
+  const cue = '制定完善的开发计划'
+  const answer = 'draw up a solid development plan'
+  const id = cardId('phrase', cue, answer)
+  world(on, {
+    [`v:${id}`]: card({ id, kind: 'phrase', cue, answer, context: PLAN, example: 'Then draw up a solid development plan.' }),
+  })
+  await start($)
+  await vocab($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cues = await ui.findAll({ type: 'Text', text: new RegExp(`^${cue}$`) })
+  expect(cues.filter(t => t.props.bold === true)).toHaveLength(1)
+  expect(await ui.find({ type: 'Text', text: /^然后跟我沟通/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^，然后跟我沟通确认之后再动手$/ })).toBeDefined()
+  await ui.press({ key: 'reveal' })
+  const answers = await ui.findAll({ type: 'Text', text: new RegExp(`^${answer}$`) })
+  expect(answers.filter(t => t.props.color === 'success' && t.props.bold === true)).toHaveLength(2)
+  expect(await ui.find({ type: 'Text', text: /^Then $/ })).toBeDefined()
   await ui.unmount()
 })
 

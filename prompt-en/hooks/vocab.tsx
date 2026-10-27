@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
 import type { Grade, Quiz, Translation, VocabCard } from '../types'
-import { keyOf, modeOf, ownWords, prepare, storeKey, withLabels } from './prompt'
+import { countForeign, keyOf, modeOf, ownWords, prepare, storeKey, withLabels } from './prompt'
 
 // The vocabulary book: what the English under the prompts taught, kept to review.
 //
@@ -76,6 +76,40 @@ const cut = (s: string | undefined, n = MAX_CONTEXT) => {
   return one.length > n ? `${one.slice(0, n - 1)}…` : one
 }
 
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// Where `words` stand in `text`, spacing and case aside, or null.
+export function locate(text: string, words: string): { at: number; end: number } | null {
+  const parts = squash(words).split(' ').filter(Boolean)
+  if (parts.length === 0) return null
+  const m = new RegExp(parts.map(escape).join('\\s+'), 'i').exec(text)
+  return m ? { at: m.index, end: m.index + m[0].length } : null
+}
+
+// A sentence ends at 。！？；, at . ! ? ; before a space, and at a line break.
+const SENTENCE_END = /[。！？；]|[.!?;](?=\s|$)|\n/g
+
+// The sentence of `text` that holds `words`, with `more` sentences either side, cut to
+// about `n` characters around the words; the start of the text where they are not in it.
+export function excerpt(text: string, words: string, more = 0, n = MAX_CONTEXT): string {
+  const hit = locate(text, words)
+  if (hit === null) return cut(text, n) ?? ''
+  const ends = [...text.matchAll(SENTENCE_END)].map(m => m.index + m[0].length)
+  const before = ends.filter(e => e <= hit.at)
+  const after = ends.filter(e => e >= hit.end)
+  const from = before[before.length - 1 - more] ?? 0
+  const span = text.slice(from, after[more] ?? text.length)
+  if (squash(span).length <= n) return squash(span)
+
+  // Too long: the stretch of it centred on the words, the words kept whole.
+  const at = hit.at - from
+  const size = hit.end - hit.at
+  const width = Math.max(n, size)
+  const start = Math.max(0, Math.min(at - Math.floor((width - size) / 2), span.length - width))
+  const stop = Math.min(span.length, start + width)
+  return `${start > 0 ? '…' : ''}${squash(span.slice(start, stop))}${stop < span.length ? '…' : ''}`
+}
+
 // What a card teaches, so the same thing is kept once: a fix by its change, a phrase
 // by its English, a pattern by its frame (a new sentence of it renews the card).
 export function cardId(kind: VocabCard['kind'], cue: string, answer: string, pattern = ''): string {
@@ -114,8 +148,8 @@ export function fromReview(t: Translation): Found[] {
     found.push({
       kind: 'fix',
       ...pair,
-      ...(t.base ? { context: cut(t.base) } : {}),
-      ...(t.text ? { example: cut(t.text) } : {}),
+      ...(t.base ? { context: excerpt(t.base, pair.cue) } : {}),
+      ...(t.text ? { example: excerpt(t.text, pair.answer) } : {}),
     })
   }
   return found
@@ -128,8 +162,12 @@ For each message pick:
 - PATTERN, at most 1: a sentence whose frame a learner can reuse in many other requests, the parts that change written as ___: "Hold off on ___ until ___", "If ___, fall back to ___", "Make sure ___ before ___", "Is there a way to ___?", "What's the point of ___?". Skip frames any learner knows ("Can you ___?", "Please ___", "Help me ___", "I want to ___").
 Fewer is better than weak ones; often a message has none.
 
+The two sides of a PHRASE mean the same, no more and no less: the original words are all the words the English renders and nothing else, in the writer's language (not English words they typed). When the expression takes the words it goes with, take those words in the original too. Check each pair before you write it: if either side says something the other does not (an object, a verb, "help me", "the options"), widen or narrow one side until they match.
+Right: 制定完善的开发计划 => draw up a solid development plan; 顺便 => while you're at it
+Wrong: 制定 => draw up a solid development plan (the English says more); 这块区域不合理 => don't make sense (the original says more)
+
 Reply one line per pick, led by the message's number, and nothing else:
-[n] PHRASE: <the fewest words of the original message that the expression stands for, copied exactly> => <the expression, copied exactly from the translation, with the word it goes with when it reads as one chunk>
+[n] PHRASE: <the original words, copied exactly from the message> => <the expression, copied exactly from the translation>
 [n] PATTERN: <one sentence of the original message, copied exactly> => <the sentence of the translation that renders it, copied exactly> => <the frame>
 If nothing is worth learning, reply NONE.`
 
@@ -167,9 +205,17 @@ export function parsePicks(reply: string, items: readonly PickItem[]): Found[][]
       if (parts.length !== 2 || cue.length > MAX_PART || answer.length > MAX_PART) continue
       // One plain word is vocabulary any dictionary has; a hyphened one (over-engineered) is kept.
       if (answer.split(/\s+/).length < 2 && !answer.includes('-')) continue
+      // English the person typed among their own words ("get") is no cue for English.
+      if (countForeign(cue) === 0) continue
       const phrases = list.filter(f => f.kind === 'phrase')
       if (phrases.length >= PHRASES_PER_PROMPT || phrases.some(f => bare(f.answer) === bare(answer))) continue
-      list.push({ kind: 'phrase', cue, answer, context: cut(item.source), example: cut(item.english) })
+      list.push({
+        kind: 'phrase',
+        cue,
+        answer,
+        context: excerpt(item.source, cue),
+        example: excerpt(item.english, answer),
+      })
       continue
     }
 
@@ -183,13 +229,9 @@ export function parsePicks(reply: string, items: readonly PickItem[]): Found[][]
       .filter(part => part !== '')
     const words = fixed.join(' ').split(/\s+/).filter(Boolean).length
     if (!pattern.includes('___') || words < 2 || !fixed.every(part => english.includes(part))) continue
-    list.push({
-      kind: 'pattern',
-      cue,
-      answer,
-      pattern,
-      ...(squash(item.source) !== cue ? { context: cut(item.source) } : {}),
-    })
+    // Where the sentence stood: it and the sentences either side.
+    const context = excerpt(item.source, cue, 1)
+    list.push({ kind: 'pattern', cue, answer, pattern, ...(bare(context) !== bare(cue) ? { context } : {}) })
   }
   return found
 }
@@ -552,14 +594,36 @@ export function registerVocab(on: On, model: string): void {
 
     const isFix = card.kind === 'fix'
     const isPattern = card.kind === 'pattern'
-    const row = (label: string, body: string, isDim = false) => (
-      <Box columnGap={2}>
-        <Text dimColor>{label}</Text>
-        <Box flexShrink={1}>
-          <Text dimColor={isDim}>{body}</Text>
+    // A row of the card. Given `words`, a dim row marks them where they stand in it,
+    // bold, or green for the English answer, so the two sides can be matched.
+    const row = (label: string, body: string, isDim = false, words?: string, isAnswer = false) => {
+      const hit = isDim && words !== undefined ? locate(body, words) : null
+      const [before, marked, after] = hit
+        ? [body.slice(0, hit.at), body.slice(hit.at, hit.end), body.slice(hit.end)]
+        : [body, '', '']
+      return (
+        <Box columnGap={2}>
+          <Text dimColor>{label}</Text>
+          <Box flexShrink={1}>
+            {hit === null ? (
+              <Text dimColor={isDim}>{body}</Text>
+            ) : (
+              <Text>
+                {before !== '' && <Text dimColor>{before}</Text>}
+                {isAnswer ? (
+                  <Text color="success" bold>
+                    {marked}
+                  </Text>
+                ) : (
+                  <Text bold>{marked}</Text>
+                )}
+                {after !== '' && <Text dimColor>{after}</Text>}
+              </Text>
+            )}
+          </Box>
         </Box>
-      </Box>
-    )
+      )
+    }
     const at = q.index
     return (
       <Box flexDirection="column" rowGap={1} width={width}>
@@ -574,7 +638,7 @@ export function registerVocab(on: On, model: string): void {
         </Text>
         <Box flexDirection="column">
           {row(isFix ? '你写的' : '中文　', card.cue)}
-          {card.context !== undefined && row(isPattern ? '出自　' : '原句　', card.context, true)}
+          {card.context !== undefined && row(isPattern ? '出自　' : '原句　', card.context, true, card.cue)}
         </Box>
         {q.isRevealed ? (
           <Box flexDirection="column" rowGap={1}>
@@ -596,7 +660,7 @@ export function registerVocab(on: On, model: string): void {
                   </Box>
                 </Box>
               )}
-              {card.example !== undefined && row('例句　', card.example, true)}
+              {card.example !== undefined && row('例句　', card.example, true, card.answer, true)}
             </Box>
             <Box columnGap={3} flexWrap="wrap">
               <Button key="again" plain hotkey="1" onPress={() => void grade($, at, 'again')}>

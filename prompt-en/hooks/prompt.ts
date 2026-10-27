@@ -17,7 +17,7 @@ export const storeKey = (key: string) => `t:${key}`
 
 // Letters outside the Latin script: Han, kana, Hangul, Cyrillic, Arabic, ...
 const FOREIGN = /[^\P{L}\p{Script=Latin}]/gu
-const countForeign = (s: string) => s.match(FOREIGN)?.length ?? 0
+export const countForeign = (s: string) => s.match(FOREIGN)?.length ?? 0
 const MARKER = /\[\[M(\d+)\]\]/g
 
 // What a host writes into the prompt for the model alone, such as the notes the desktop

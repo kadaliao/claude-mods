@@ -45,9 +45,11 @@ export type VocabCard = {
   why?: string
   // pattern: the frame, its changing parts as ___ ("Hold off on ___ until ___").
   pattern?: string
-  // The prompt it came from, cut short.
+  // The sentence of the prompt it came from that holds the cue (a pattern's, with the
+  // sentences either side), cut short around it. Before 0.3.1, the prompt's start.
   context?: string
-  // fix: the prompt corrected; phrase: the English it appeared in. Cut short.
+  // The sentence that holds the answer, cut short around it. fix: of the prompt
+  // corrected; phrase: of the English it appeared in.
   example?: string
   addedAt: number
   // How many times it was collected: a fix made again counts.

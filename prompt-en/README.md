@@ -75,7 +75,8 @@ What the English under your prompts teaches is kept in a vocabulary book:
   `先别急着提交，等测试跑完再说 → Hold off on committing until the tests finish.`, its frame
   `Hold off on ___ until ___`. Everyday words, common frames ("Can you ___?"), technical terms
   and code are skipped, and a pick is kept only when its words are in your prompt and in the
-  English, so nothing made up gets in.
+  English, so nothing made up gets in. Its two sides say the same, no more and no less:
+  `制定完善的开发计划 → draw up a solid development plan`, never `制定` alone.
 
 `/vocab import` fills the book from the prompts you typed before it: the corrections prompt-en
 kept as they stand, and the translations matched to your words in Claude Code's prompt history
@@ -92,6 +93,9 @@ filed when it is done; a prompt already filed is never filed twice.
 
 f: 显示答案   Esc 关闭
 ```
+
+Under the words is the sentence of your prompt they come from, and with the answer the sentence
+of the English that holds it, each with the words marked, so the two sides can be matched.
 
 `f` shows the answer, then `1` forgot, `2` unsure, `3` knew it (Enter picks it), `x` drops the
 card. A card you knew waits longer each time (1, 3, 7, 16, 35, then 90 days); one you forgot
