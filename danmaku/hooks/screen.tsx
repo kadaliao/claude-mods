@@ -35,18 +35,6 @@ export function cellsOf(s: string): number {
   return n
 }
 
-export function cutCells(s: string, room: number): string {
-  let used = 0
-  let out = ''
-  for (const ch of s) {
-    const w = charCells(ch)
-    if (used + w > room) break
-    used += w
-    out += ch
-  }
-  return out
-}
-
 // --- the lanes ------------------------------------------------------------------------
 
 // What the hooks module hands over: the latest comments, oldest first, by rising id.

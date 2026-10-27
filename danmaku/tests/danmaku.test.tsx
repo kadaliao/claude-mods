@@ -2,9 +2,9 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import type { Band } from '../types'
-import { MAX_CELLS, addComments, buildPrompt, describe, parseDanmaku, reactionTo } from '../hooks/register'
+import { addComments, buildPrompt, describe, parseDanmaku, reactionTo } from '../hooks/register'
 import type { Flying, Lanes } from '../hooks/screen'
-import { cellsOf, charCells, freeLane, layoutLane, place, step } from '../hooks/screen'
+import { cellsOf, charCells, emptyLanes, freeLane, layoutLane, place, step } from '../hooks/screen'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const PRESENTATION = { isFullscreen: true, columns: 160 } as const
@@ -80,6 +80,18 @@ test('lays out a lane, cut at both edges', () => {
   expect(colored).toEqual([{ text: 'ab', color: 'success' }, { text: `${NB}cd` }])
 })
 
+test('a comment wider than the lane shows every letter on its way across', () => {
+  const geo = { cols: 12, lanes: 1 }
+  const long = '这条弹幕比整条跑道还要长得多'
+  let s = place(emptyLanes, [{ id: 1, text: long }], geo)
+  const shown = new Set<string>()
+  while (s.items.length > 0) {
+    for (const ch of text(layoutLane(s.items, geo.cols))) shown.add(ch)
+    s = step(s, [], geo)
+  }
+  for (const ch of long) expect(shown.has(ch)).toBe(true)
+})
+
 test('a lane is free once the comment ahead has moved on, and only if it is not caught', () => {
   const geo = { cols: 40, lanes: 3 }
   expect(freeLane([fly({ x: 38, width: 4 })], geo, 1)).toBe(1)
@@ -114,7 +126,7 @@ test('new comments take the next ids, the latest few kept', () => {
 
 test('reads the comments out of a reply', () => {
   expect(parseDanmaku('1. 前排\n- "666"\n弹幕3：好家伙\n\n前排\n「草」')).toEqual(['前排', '666', '好家伙'])
-  expect(cellsOf(parseDanmaku('长'.repeat(40))[0] ?? '')).toBe(MAX_CELLS)
+  expect(parseDanmaku('长'.repeat(40))).toEqual(['长'.repeat(40)])
 })
 
 test('reacts at once to what matters', () => {

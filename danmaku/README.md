@@ -59,7 +59,7 @@ Whether it is on is remembered: a new session starts with it on again. `ctrl+x c
   being interrupted. Frequent things (reads, edits, plain commands) get a reaction only now and then.
 - **Model comments.** Each tool call, your prompt, and the end of the turn go into a queue as one
   short line ("Claude 跑命令：npm test（失败了）"). Once three are queued, or three seconds after the
-  first, the mod asks the model for one to three comments of at most 15 characters, passing the
+  first, the mod asks the model for one to three comments, passing the
   last ten comments so it does not repeat them. One request at a time, and at most one every 4
   seconds (the `density` option: 8s, 4s or 2s).
 - **The lanes.** Every comment takes about nine seconds to cross, so a longer one moves faster, as

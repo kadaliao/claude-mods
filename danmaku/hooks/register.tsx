@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Band, Comment } from '../types'
-import { CROSS_MS, cutCells } from './screen'
+import { CROSS_MS } from './screen'
 
 // Bullet comments, Bilibili style, flying right to left in a few lanes above the prompt
 // while Claude works:
@@ -26,8 +26,6 @@ const ROOM_FOR_OTHERS = 3
 const LINGER_MS = CROSS_MS + 3000
 // Comments handed to the lanes: enough for a burst, few enough to replay after a reload.
 const MAX_KEPT = 12
-// A comment is cut to this many cells.
-export const MAX_CELLS = 30
 // The model is asked once this many things have happened, or this long after the first.
 const BATCH = 3
 const BATCH_WAIT_MS = 3000
@@ -167,7 +165,7 @@ const SYSTEM = `你是 B 站弹幕区的观众，正在看一场直播：AI 程�
 
 规则：
 - 发 1 到 3 条，每行一条，只写弹幕本身：不要编号、引号、前缀或解释。
-- 每条不超过 15 个字，口语、短、有梗，像真实弹幕，比如：前方高能、666、草、绷不住了、这波操作、懂了但没完全懂、好家伙、主播别搞、典。
+- 口语、有梗，像真实弹幕，比如：前方高能、666、草、绷不住了、这波操作、懂了但没完全懂、好家伙、主播别搞、典。
 - 围绕刚发生的事起哄或吐槽，可以调侃 Claude，不要人身攻击，不要脏话。
 - 不要照抄命令或文件名，不要讲技术细节。
 - 别和最近的弹幕重复。`
@@ -186,8 +184,7 @@ export function parseDanmaku(reply: string): string[] {
       .replace(/^["“”'‘’「『]+|["“”'‘’」』]+$/g, '')
       .trim()
     if (line === '' || /^<\/?live>$/.test(line)) continue
-    const cut = cutCells(line, MAX_CELLS)
-    if (!out.includes(cut)) out.push(cut)
+    if (!out.includes(line)) out.push(line)
   }
   return out.slice(0, 3)
 }
@@ -276,7 +273,7 @@ async function flush($: EngineInterface): Promise<void> {
       model,
       system: SYSTEM,
       prompt: buildPrompt(lines, recent),
-      maxTokens: 200,
+      maxTokens: 600,
       effort: 'low',
       timeoutMs: TIMEOUT_MS,
     })
@@ -342,7 +339,7 @@ export const register: Register = (on, options) => {
     }
     await setOn($, true)
     if (arg !== '' && word !== 'on') {
-      await spawn($, [{ text: cutCells(arg.replace(/\s+/g, ' '), MAX_CELLS), color: 'claude', isMine: true }])
+      await spawn($, [{ text: arg.replace(/\s+/g, ' '), color: 'claude', isMine: true }])
       return { text: '弹幕已发送。' }
     }
     // One comment at once, so the lanes show where they are.
