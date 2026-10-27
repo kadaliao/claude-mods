@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Translation } from '../types'
 import { WIDE, keyOf, modeOf, ownWords, prepare, storeKey, withLabels } from './prompt'
 import type { Material, Mode, Prepared } from './prompt'
+import { checkForUpdate } from './update'
 import { collect, registerVocab, startVocab } from './vocab'
 
 // A line of English under each prompt in the transcript.
@@ -326,6 +327,7 @@ export const register: Register = (on, options) => {
     const saved = await $.store.get('enabled')
     if (typeof saved === 'boolean') await update($, isOn, () => saved)
     await startVocab($)
+    if (e.isInteractive) void checkForUpdate($).catch(() => {})
     return started
   })
 

@@ -124,6 +124,21 @@ claude plugin install prompt-en@kadaliao
 
 It works from the next session, or after `/reload-plugins`.
 
+### Updating
+
+Auto-update is off for a third-party marketplace until you turn it on: in `/plugin`, open
+Marketplaces, pick kadaliao and choose **Enable auto-update**, and new versions install at start.
+
+Without it, prompt-en reads its `plugin.json` on GitHub at most once a day, and when a newer
+version is out it says so once per version, with the commands that install it:
+
+```bash
+claude plugin marketplace update kadaliao
+claude plugin update prompt-en@kadaliao
+```
+
+then `/reload-plugins`. It only tells you; it never installs anything.
+
 ## Using it
 
 | | |
@@ -162,6 +177,8 @@ wrote it.
   keeps is left out.
 - The vocabulary book is kept in the plugin store, on this machine, up to 1,000 cards; past that
   the best-known oldest leave.
+- The update check reaches raw.githubusercontent.com at most once a day and sends nothing of
+  yours; with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set it does not run.
 - Your own words are sent up to 6,000 characters; past that the answer covers the start.
 - A failed request leaves one dim line, `no translation (overloaded)` or `no review (…)`, with
   no retry. Submitting the same text again retries it.

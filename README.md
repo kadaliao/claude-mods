@@ -41,6 +41,9 @@ claude plugin update <mod>@kadaliao
 
 then run `/reload-plugins` in an open session, or start a new one.
 
+Auto-update is off for a third-party marketplace until you turn it on: in `/plugin`, open
+Marketplaces, pick kadaliao and choose **Enable auto-update**.
+
 ## Local development
 
 ```bash

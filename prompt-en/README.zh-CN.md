@@ -93,6 +93,19 @@ claude plugin install prompt-en@kadaliao
 
 下一个会话起生效，或者在已打开的会话里运行 `/reload-plugins`。
 
+### 更新
+
+第三方插件市场默认不自动更新。建议在 `/plugin` → Marketplaces → kadaliao 里选 **Enable auto-update**，之后新版本会在启动时自动装上。
+
+没开自动更新也没关系：prompt-en 每天最多一次读取 GitHub 上的 `plugin.json`，发现新版本时弹一条提示，每个版本只提示一次，附上更新命令：
+
+```bash
+claude plugin marketplace update kadaliao
+claude plugin update prompt-en@kadaliao
+```
+
+然后运行 `/reload-plugins`。它只提醒，不会替你安装。
+
 ## 用法
 
 | | |
@@ -117,6 +130,7 @@ mod 写的内容都不会发给对话所用的模型，模型读到的仍是你�
 - 开着生词本时，每条译文多发一次小请求来挑短语和句型（很短的 prompt 跳过）；纠错不额外花钱。
 - `/vocab import` 只能从输入历史里找翻译的原文：带粘贴内容的 prompt（历史里显示成 `[Pasted text #1]`），以及早于 store 保留的最近 300 条的，都导不进来。
 - 生词本存在本机的插件 store 里，最多 1000 张；超出后最熟的老卡片先删。
+- 检查新版本时，每天最多访问一次 raw.githubusercontent.com，不发送任何你的内容；设置了 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` 时不检查。
 - 你自己写的文字最多发送 6000 个字符，超出部分只处理开头。
 - 请求失败时留一行灰字 `no translation (overloaded)` 或 `no review (…)`，不自动重试；再次提交同样的文字会重试。
 - 按文字系统判断语言：法语、西班牙语的 prompt 会被当作英文来纠错。

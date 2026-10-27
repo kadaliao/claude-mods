@@ -37,6 +37,8 @@ claude plugin update <mod>@kadaliao
 
 然后在已打开的会话里运行 `/reload-plugins`，或者开一个新会话。
 
+第三方插件市场默认不自动更新。想自动拿到新版本，在 `/plugin` → Marketplaces → kadaliao 里选 **Enable auto-update**。
+
 ## 本地开发
 
 ```bash
