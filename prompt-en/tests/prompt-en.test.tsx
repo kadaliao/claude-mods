@@ -18,6 +18,8 @@ function world(on: On, reply: (prompt: string) => string = () => 'I want to crea
   on('command.register', () => ({ value: { command: 'prompt-en' } }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('model.complete', (_, e) => {
+    // The vocabulary book's pick of phrases, which tests/vocab.test.tsx covers.
+    if (e.system?.includes('worth learning')) return { value: { isAnswered: true, text: 'NONE', usage: USAGE } }
     prompts.push(e.prompt)
     return { value: { isAnswered: true, text: reply(e.prompt), usage: USAGE } }
   })

@@ -2,6 +2,7 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Translation } from '../types'
+import { collect, registerVocab, startVocab } from './vocab'
 
 // A line of English under each prompt in the transcript.
 //
@@ -331,7 +332,16 @@ async function save($: EngineInterface, key: string, t: Translation): Promise<vo
   await $.store.set(INDEX, next.slice(-KEEP))
 }
 
-async function answer($: EngineInterface, key: string, text: string, mode: Mode, model: string): Promise<void> {
+// Answers a prompt, and files what a new answer teaches in the vocabulary book;
+// one already answered (the same prompt again, a resume) is not collected twice.
+async function answer(
+  $: EngineInterface,
+  key: string,
+  text: string,
+  mode: Mode,
+  model: string,
+  isCollecting: boolean,
+): Promise<void> {
   const now = await $.clock.now()
   const current = await read($, memberOf(byText, { requestId: key }))
   if (current?.status === 'done') return
@@ -369,7 +379,9 @@ async function answer($: EngineInterface, key: string, text: string, mode: Mode,
     done = review !== null ? { status: 'done', ...meta, ...review } : { status: 'failed', text: '', reason: 'unreadable-reply', ...meta }
   }
   await update($, memberOf(byText, { requestId: key }), () => done)
-  if (done.status === 'done') await save($, key, done)
+  if (done.status !== 'done') return
+  await save($, key, done)
+  if (isCollecting) await collect($, done, withLabels(prepared.prose, prepared.materials), prepared.proseWeight, model)
 }
 
 // --- drawing --------------------------------------------------------------------
@@ -414,6 +426,8 @@ const fmtChars = (n: number) => (n < 1000 ? `${n}` : `${Math.round(n / 100) / 10
 export const register: Register = (on, options) => {
   const model = typeof options.model === 'string' && options.model !== '' ? options.model : 'haiku'
   const isReviewing = options.reviewEnglish !== false
+  const isCollecting = options.collectVocab !== false
+  registerVocab(on)
   // The submission whose row is being appended, so the row's id can be tied to it.
   let submitted: string | undefined
 
@@ -426,6 +440,7 @@ export const register: Register = (on, options) => {
     })
     const saved = await $.store.get('enabled')
     if (typeof saved === 'boolean') await update($, isOn, () => saved)
+    await startVocab($)
     return started
   })
 
@@ -449,7 +464,7 @@ export const register: Register = (on, options) => {
     if (mode !== null && (mode === 'translate' || isReviewing) && (await read($, isOn))) {
       const key = keyOf(own)
       submitted = key
-      void answer($, key, own, mode, model).catch(() => {})
+      void answer($, key, own, mode, model, isCollecting).catch(() => {})
     }
     return next(e)
   })

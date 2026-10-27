@@ -54,6 +54,35 @@ Long prompts get a short answer, not a line-by-line one:
 Prompts of fewer than 3 English words (`ok`, `commit it`), slash commands, task notifications
 and messages from other sessions are left alone.
 
+## Vocabulary book
+
+What the English under your prompts teaches is kept in a vocabulary book:
+
+- **a correction or polish of your English** gives a card of your words and the better ones:
+  `add timeout → add a timeout (article)`. Making the same mistake again sends the card back to
+  the start.
+- **a translation** gives up to two expressions in it worth learning, picked by a small model:
+  `顺便 → while you're at it`, `兜底 → fall back to`, `过度设计 → over-engineered`. Everyday
+  words, technical terms and code are skipped, and a pick is kept only when its words are in
+  your prompt and in the English, so nothing made up gets in.
+
+`/vocab` opens a pane with the cards that are due, one at a time:
+
+```
+生词本  1 / 3 · 共 18 条
+
+你写的  add timeout
+原句    Make this function async and add timeout
+
+f: 显示答案   Esc 关闭
+```
+
+`f` shows the answer, then `1` forgot, `2` unsure, `3` knew it (Enter picks it), `x` drops the
+card. A card you knew waits longer each time (1, 3, 7, 16, 35, then 90 days); one you forgot
+comes back at the end of the sitting and starts over. A sitting holds up to 20 cards. When
+cards are due, a toast says so at the start of a session, at most twice a day.
+`/vocab list` lists the latest cards and how well you know each.
+
 ## Install
 
 At the prompt of a terminal session:
@@ -78,6 +107,8 @@ It works from the next session, or after `/reload-plugins`.
 | `/prompt-en` | Turns the mod on or off (`/prompt-en on`, `/prompt-en off`); remembered across sessions |
 | `model` option | `haiku` by default; `sonnet` or `opus` |
 | `reviewEnglish` option | `true` by default; `false` keeps translations and drops the reviews of English |
+| `/vocab` | Reviews the vocabulary book's due cards in a pane; `/vocab list` lists the latest |
+| `collectVocab` option | `true` by default; `false` stops filling the vocabulary book and its extra call |
 
 Options are set in the plugin's options (`/config`).
 
@@ -100,6 +131,10 @@ wrote it.
 - One model request per prompt it reads, billed like any other (Haiku, low effort). The same
   prompt text is read once: the answer is kept in the plugin store (the latest 300), so a
   resumed session shows it again and a repeated `继续` costs nothing.
+- With the vocabulary book on, a translation costs a second small request, to pick its phrases
+  (skipped for a prompt of a few characters). A review costs nothing more.
+- The vocabulary book is kept in the plugin store, on this machine, up to 1,000 cards; past that
+  the best-known oldest leave.
 - Your own words are sent up to 6,000 characters; past that the answer covers the start.
 - A failed request leaves one dim line, `no translation (overloaded)` or `no review (…)`, with
   no retry. Submitting the same text again retries it.

@@ -1,11 +1,11 @@
 {
   "name": "prompt-en",
-  "version": "0.1.1",
-  "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English",
+  "version": "0.2.0",
+  "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English, and a vocabulary book to review them",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/prompt-en",
   "repository": "https://github.com/kadaliao/claude-mods",
-  "keywords": ["translate", "english", "prompt", "mod"],
+  "keywords": ["translate", "english", "prompt", "vocabulary", "flashcards", "mod"],
   "types": "./types/index.d.ts",
   "userConfig": {
     "model": {
@@ -19,6 +19,12 @@
       "type": "boolean",
       "title": "Review English prompts",
       "description": "Correct or polish prompts you write in English, or suggest other ways to say them",
+      "default": true
+    },
+    "collectVocab": {
+      "type": "boolean",
+      "title": "Vocabulary book",
+      "description": "Keep the corrections and the phrases worth learning for /vocab to review (a translation costs one more small call to pick its phrases)",
       "default": true
     }
   }

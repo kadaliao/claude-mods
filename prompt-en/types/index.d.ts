@@ -27,6 +27,48 @@ export type Translation = {
   startedAt?: number
 }
 
+// One entry of the vocabulary book: something the person said, or could not yet say,
+// and the English to learn for it.
+export type VocabCard = {
+  // A hash of what it teaches, so the same correction or phrase is kept once.
+  id: string
+  // fix: a review corrected or polished the person's English. phrase: an expression
+  // the English of a prompt in another language uses.
+  kind: 'fix' | 'phrase'
+  // What the card shows first. fix: the person's words; phrase: their own-language words.
+  cue: string
+  // What they recall: the better English, or the English expression.
+  answer: string
+  // fix: the kind of change and why, a few words ("article").
+  why?: string
+  // The prompt it came from, cut short.
+  context?: string
+  // fix: the prompt corrected; phrase: the English it appeared in. Cut short.
+  example?: string
+  addedAt: number
+  // How many times it was collected: a fix made again counts.
+  seen: number
+  // Leitner box, 0 (new or forgotten) up; each box waits longer before it is due.
+  box: number
+  due: number
+  lapses: number
+}
+
+export type Grade = 'again' | 'hard' | 'good'
+
+// One sitting of review in the pane.
+export type Quiz = {
+  // The cards of this sitting, in order, as they stood when it began.
+  cards: VocabCard[]
+  index: number
+  isRevealed: boolean
+  tally: Record<Grade, number>
+  // Cards in the book when it began.
+  deckSize: number
+  // When the next card is due once none is, for the screen with nothing to review.
+  nextDue?: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'prompt-en': {
@@ -35,6 +77,7 @@ declare module 'claude-code' {
       // A transcript row's id to the hash of the prompt it holds.
       byRow: StateFamily<string | null>
       isOn: boolean
+      quiz: Shaped<Quiz | null>
     }
   }
 }

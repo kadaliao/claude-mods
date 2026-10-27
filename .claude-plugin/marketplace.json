@@ -14,7 +14,7 @@
     {
       "name": "prompt-en",
       "source": "./prompt-en",
-      "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English"
+      "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English, and a vocabulary book to review them"
     },
     {
       "name": "danmaku",
