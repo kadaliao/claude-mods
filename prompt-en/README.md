@@ -5,6 +5,8 @@ English | [简体中文](README.zh-CN.md)
 A line of English under each prompt you send, drawn in the transcript. It scrolls with the
 conversation and takes no fixed space on screen.
 
+![A Chinese prompt in Claude Code, with its English underneath](../docs/prompt-en/demo.gif)
+
 **Written in another language**, the prompt gets its English:
 
 ```
@@ -28,6 +30,8 @@ prompt corrected, with the new words in green and why; if it reads well, two oth
 differently, `✓` one that reads well. Terse chat style (lowercase, no final period, "fixed it")
 is not flagged.
 
+![Two English prompts reviewed: other ways to say one, a correction of the other](../docs/prompt-en/review.png)
+
 ## Long prompts
 
 Long prompts get a short answer, not a line-by-line one:
@@ -37,12 +41,14 @@ Long prompts get a short answer, not a line-by-line one:
   letters: an English log or doc) each become one label such as `[TypeScript code, 60 lines]`.
   A 50,000-character paste costs a few words, both in the request and on screen.
 - **Long writing in another language gets its gist.** Past about 120 words of English (some 300
-  Chinese characters), the English is condensed to at most 4 sentences in the first person.
-  Every request, question and constraint stays; background and repetition go. A dim
+  Chinese characters), the English is condensed into one paragraph in the first person. The
+  model is asked for about 4 sentences, but a very long prompt can get twice that. Every
+  request, question and constraint stays; background and repetition go. A dim
   `· gist of 2.5k chars` closes the line.
 - **Long English gets its main fixes.** Past about 60 words, the review lists up to 5 changes
   (`"should be add" → "should add" · "it help me" → "it helps me" · …`) rather than a rewrite.
-- **The terminal shows at most 6 rows** until `ctrl+o` expands the transcript.
+- **The gist can still take several rows** on the terminal: about 10 for a prompt of 2,000
+  characters. When it is cut short, a dim `… ctrl+o for all` marks the rest.
 
 ```
 > 下面是 statusline 的代码，帮我看看为什么 git 分支有时候不刷新：```ts …60 lines…``` 背景是这样的：…
@@ -50,6 +56,8 @@ Long prompts get a short answer, not a line-by-line one:
       fails to refresh. … Please don't change the external interface, and don't add any new
       dependencies. [TypeScript code, 60 lines] · gist of 2.5k chars
 ```
+
+![A long Chinese prompt with 57 lines of pasted code, and its English gist](../docs/prompt-en/long-prompt.png)
 
 Prompts of fewer than 3 English words (`ok`, `commit it`), slash commands, task notifications
 and messages from other sessions are left alone.
@@ -90,6 +98,10 @@ card. A card you knew waits longer each time (1, 3, 7, 16, 35, then 90 days); on
 comes back at the end of the sitting and starts over. A sitting holds up to 20 cards. When
 cards are due, a toast says so at the start of a session, at most twice a day.
 `/vocab list` lists the latest cards and how well you know each.
+
+![A card in the /vocab pane with its answer shown: a whole sentence and its frame](../docs/prompt-en/vocab-card.png)
+
+![/vocab list: the latest cards and how well each is known](../docs/prompt-en/vocab-list.png)
 
 ## Install
 
