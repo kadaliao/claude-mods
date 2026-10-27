@@ -2,7 +2,8 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { cardId, fromReview, parsePair, parsePhrases, pick, schedule } from '../hooks/vocab'
+import { keyOf } from '../hooks/prompt'
+import { cardId, fromReview, parsePair, parsePicks, pick, schedule } from '../hooks/vocab'
 import type { Translation, VocabCard } from '../types'
 
 const USAGE = { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -108,6 +109,9 @@ test('a review that reads well gives no card; a long one, one per fix', () => {
   expect(fromReview(long).map(f => f.answer)).toEqual(['information', 'discuss'])
 })
 
+const ZH2 = '先别急着提交，等测试跑完再说'
+const ZH2_EN = 'Hold off on committing until the tests finish.'
+
 test('a phrase is kept only where both texts hold it', () => {
   const reply = [
     "PHRASE: 顺便 => while you're at it",
@@ -115,8 +119,45 @@ test('a phrase is kept only where both texts hold it', () => {
     'PHRASE: 超时 => graceful shutdown',
     'PHRASE: 函数 => function',
   ].join('\n')
-  expect(parsePhrases(reply, ZH, ZH_EN).map(f => [f.cue, f.answer])).toEqual([['顺便', "while you're at it"]])
-  expect(parsePhrases('NONE', ZH, ZH_EN)).toEqual([])
+  const picks = parsePicks(reply, [{ source: ZH, english: ZH_EN }])
+  expect(picks[0]?.map(f => [f.cue, f.answer])).toEqual([['顺便', "while you're at it"]])
+  expect(parsePicks('NONE', [{ source: ZH, english: ZH_EN }])).toEqual([[]])
+  const hyphened = parsePicks('PHRASE: 过度设计 => over-engineered', [
+    { source: '有点过度设计了', english: 'It is a bit over-engineered.' },
+  ])
+  expect(hyphened[0]?.[0]?.answer).toBe('over-engineered')
+})
+
+test('a pattern is a sentence of both texts whose frame is its own words', () => {
+  const items = [
+    { source: ZH, english: ZH_EN },
+    { source: ZH2, english: ZH2_EN },
+  ]
+  const reply = [
+    "[1] PHRASE: 顺便 => while you're at it",
+    '[2] PATTERN: 先别急着提交，等测试跑完再说 => Hold off on committing until the tests finish. => Hold off on ___ until ___',
+    '[2] PATTERN: 先别急着提交 => Hold off on committing => Hold off on ___',
+  ].join('\n')
+  const [first, second] = parsePicks(reply, items)
+  expect(first?.map(f => f.kind)).toEqual(['phrase'])
+  expect(second).toEqual([
+    {
+      kind: 'pattern',
+      cue: ZH2,
+      answer: ZH2_EN,
+      pattern: 'Hold off on ___ until ___',
+    },
+  ])
+
+  const bad = [
+    // A frame of words the sentence does not have.
+    '[1] PATTERN: 先别急着提交，等测试跑完再说 => Hold off on committing until the tests finish. => Wait to ___ until ___',
+    // No blank to fill.
+    '[1] PATTERN: 先别急着提交，等测试跑完再说 => Hold off on committing until the tests finish. => Hold off on committing',
+    // A sentence of neither text.
+    '[1] PATTERN: 等一下 => Hold off on committing until the tests finish. => Hold off on ___ until ___',
+  ].join('\n')
+  expect(parsePicks(bad, [{ source: ZH2, english: ZH2_EN }])).toEqual([[]])
 })
 
 test('a card moves up a box when known, starts over when forgotten', () => {
@@ -231,4 +272,92 @@ test('due cards are mentioned once at the start, not at every session', async ($
   await start($)
   await start($)
   expect(toasts).toEqual(['生词本有 1 条该复习了 · /vocab'])
+})
+
+// --- importing what came before ---------------------------------------------------------
+
+const HISTORY = [ZH, ZH2, '跑一下', EN, 'not json']
+  .map(text => (text === 'not json' ? text : JSON.stringify({ display: text, timestamp: 1 })))
+  .join('\n')
+
+// What prompt-en kept from before the book; `isZhKept` false leaves ZH to be typed now.
+function past(on: On, isZhKept = true) {
+  const kept: Record<string, unknown> = {
+    ...(isZhKept ? { [`t:${keyOf(ZH)}`]: { status: 'done', kind: 'translate', text: ZH_EN } } : {}),
+    [`t:${keyOf(ZH2)}`]: { status: 'done', text: ZH2_EN },
+    [`t:${keyOf(EN)}`]: {
+      status: 'done',
+      kind: 'review',
+      verdict: 'fix',
+      base: EN,
+      text: 'Make this function async and add a timeout',
+      note: 'article: "add timeout" → "add a timeout"',
+    },
+  }
+  const w = world(
+    on,
+    kept,
+    "[1] PHRASE: 顺便 => while you're at it\n[2] PATTERN: 先别急着提交，等测试跑完再说 => Hold off on committing until the tests finish. => Hold off on ___ until ___",
+  )
+  mock.env(on, { HOME: '/home/u' })
+  on('fs.read', (_, e) => {
+    if (e.path !== '/home/u/.claude/history.jsonl') throw new Error('ENOENT')
+    return { value: HISTORY }
+  })
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  return { ...w, toasts }
+}
+
+test('/vocab import files the corrections and translations from before the book', async ($, on) => {
+  const w = past(on)
+  await start($)
+  const ran = await vocab($, 'import')
+  expect(ran.text).toContain('开始导入')
+  await w.clock.settle()
+
+  // Both translations went in one call; the review needed none.
+  expect(w.calls).toEqual({ translate: 0, review: 0, phrases: 1 })
+  expect(w.toasts.at(-1)).toContain('看了 3 条以前的 prompt，新收 3 张（纠错 1 · 短语 1 · 句型 1）')
+  const listed = (await vocab($, 'list')).text
+  expect(listed).toContain('add timeout → add a timeout')
+  expect(listed).toContain("顺便 → while you're at it")
+  expect(listed).toContain('Hold off on ___ until ___')
+
+  // Again: nothing new, and no call.
+  await vocab($, 'import')
+  await w.clock.settle()
+  expect(w.calls.phrases).toBe(1)
+  expect(w.toasts.at(-1)).toBe('生词本：没有新的可以导入了。')
+})
+
+test('a pattern card shows the sentence, then its English and the frame', async ($, on) => {
+  const id = cardId('pattern', ZH2, ZH2_EN, 'Hold off on ___ until ___')
+  world(on, {
+    [`v:${id}`]: card({ id, kind: 'pattern', cue: ZH2, answer: ZH2_EN, pattern: 'Hold off on ___ until ___' }),
+  })
+  await start($)
+  await vocab($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: new RegExp(`^${ZH2}$`) })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Hold off on ___/ })).toBeUndefined()
+  await ui.press({ key: 'reveal' })
+  expect(await ui.find({ type: 'Text', text: /^Hold off on ___ until ___$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^句型/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a prompt filed as it was typed is not filed again by an import', async ($, on) => {
+  const w = past(on, false)
+  await start($)
+  await submit($, ZH)
+  await w.clock.settle()
+  expect(w.calls).toEqual({ translate: 1, review: 0, phrases: 1 })
+  await vocab($, 'import')
+  await w.clock.settle()
+  // ZH was filed live; ZH2 and the review are new.
+  expect(w.toasts.at(-1)).toContain('看了 2 条以前的 prompt')
 })

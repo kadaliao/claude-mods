@@ -33,14 +33,18 @@ export type VocabCard = {
   // A hash of what it teaches, so the same correction or phrase is kept once.
   id: string
   // fix: a review corrected or polished the person's English. phrase: an expression
-  // the English of a prompt in another language uses.
-  kind: 'fix' | 'phrase'
-  // What the card shows first. fix: the person's words; phrase: their own-language words.
+  // the English of a prompt in another language uses. pattern: a sentence of that
+  // English whose frame can be reused.
+  kind: 'fix' | 'phrase' | 'pattern'
+  // What the card shows first. fix: the person's words; phrase and pattern: their
+  // own-language words, a pattern's a whole sentence.
   cue: string
   // What they recall: the better English, or the English expression.
   answer: string
   // fix: the kind of change and why, a few words ("article").
   why?: string
+  // pattern: the frame, its changing parts as ___ ("Hold off on ___ until ___").
+  pattern?: string
   // The prompt it came from, cut short.
   context?: string
   // fix: the prompt corrected; phrase: the English it appeared in. Cut short.

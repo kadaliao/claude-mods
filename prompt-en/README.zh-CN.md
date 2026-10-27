@@ -47,7 +47,9 @@
 prompt 下方那行英文教过你的东西，会收进生词本：
 
 - **英文被纠正或润色过**，收一张「你写的 → 更地道的」卡片：`add timeout → add a timeout（article）`。同样的错再犯一次，这张卡片退回从头复习。
-- **中文 prompt 的译文**，由小模型挑出最多两个值得学的表达：`顺便 → while you're at it`、`兜底 → fall back to`、`过度设计 → over-engineered`。日常词、技术术语、代码都跳过；挑出来的词必须在你的原文和译文里都找得到才收，不会收进编造的内容。
+- **中文 prompt 的译文**，由小模型挑出最多两个值得学的表达：`顺便 → while you're at it`、`兜底 → fall back to`、`过度设计 → over-engineered`；再挑最多一个可以套用的句型，整句背：`先别急着提交，等测试跑完再说 → Hold off on committing until the tests finish.`，句型 `Hold off on ___ until ___`。日常词、人人都会的句型（`Can you ___?`）、技术术语、代码都跳过；挑出来的内容必须在你的原文和译文里都找得到才收，不会收进编造的内容。
+
+`/vocab import` 把生词本出现之前的 prompt 也导进来：prompt-en 存下的纠错直接收；翻译则用 Claude Code 的输入历史（`~/.claude/history.jsonl`）里的原文去配对存下的译文，每 8 条问一次模型。导入在后台进行，完成后提示收了多少；已经收过的 prompt 不会重复收。
 
 `/vocab` 打开一个面板，一张一张复习到期的卡片：
 
@@ -86,7 +88,7 @@ claude plugin install prompt-en@kadaliao
 | `/prompt-en` | 开关这个 mod（`/prompt-en on`、`/prompt-en off`），跨会话记住 |
 | `model` 选项 | 默认 `haiku`，可以改成 `sonnet` 或 `opus` |
 | `reviewEnglish` 选项 | 默认 `true`；设为 `false` 后只保留翻译，不再纠错英文 |
-| `/vocab` | 在面板里复习生词本里到期的卡片；`/vocab list` 列出最近收的 |
+| `/vocab` | 在面板里复习生词本里到期的卡片；`/vocab list` 列出最近收的；`/vocab import` 导入以前的 prompt |
 | `collectVocab` 选项 | 默认 `true`；设为 `false` 后不再往生词本里收，也不再多发那次请求 |
 
 选项在插件选项（`/config`）里设置。
@@ -100,7 +102,8 @@ mod 写的内容都不会发给对话所用的模型，模型读到的仍是你�
 ## 限制
 
 - 每条需要处理的 prompt 发一次模型请求，和其他请求一样计费（Haiku，低 effort）。同样的文字只处理一次：结果存在插件 store 里（保留最近 300 条），所以恢复会话（resume）后还会显示，重复输入 `继续` 不再花钱。
-- 开着生词本时，每条译文多发一次小请求来挑短语（很短的 prompt 跳过）；纠错不额外花钱。
+- 开着生词本时，每条译文多发一次小请求来挑短语和句型（很短的 prompt 跳过）；纠错不额外花钱。
+- `/vocab import` 只能从输入历史里找翻译的原文：带粘贴内容的 prompt（历史里显示成 `[Pasted text #1]`），以及早于 store 保留的最近 300 条的，都导不进来。
 - 生词本存在本机的插件 store 里，最多 1000 张；超出后最熟的老卡片先删。
 - 你自己写的文字最多发送 6000 个字符，超出部分只处理开头。
 - 请求失败时留一行灰字 `no translation (overloaded)` 或 `no review (…)`，不自动重试；再次提交同样的文字会重试。

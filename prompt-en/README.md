@@ -62,9 +62,17 @@ What the English under your prompts teaches is kept in a vocabulary book:
   `add timeout → add a timeout (article)`. Making the same mistake again sends the card back to
   the start.
 - **a translation** gives up to two expressions in it worth learning, picked by a small model:
-  `顺便 → while you're at it`, `兜底 → fall back to`, `过度设计 → over-engineered`. Everyday
-  words, technical terms and code are skipped, and a pick is kept only when its words are in
-  your prompt and in the English, so nothing made up gets in.
+  `顺便 → while you're at it`, `兜底 → fall back to`, `过度设计 → over-engineered`; and at most
+  one sentence whose frame you can reuse, a whole sentence to say in English:
+  `先别急着提交，等测试跑完再说 → Hold off on committing until the tests finish.`, its frame
+  `Hold off on ___ until ___`. Everyday words, common frames ("Can you ___?"), technical terms
+  and code are skipped, and a pick is kept only when its words are in your prompt and in the
+  English, so nothing made up gets in.
+
+`/vocab import` fills the book from the prompts you typed before it: the corrections prompt-en
+kept as they stand, and the translations matched to your words in Claude Code's prompt history
+(`~/.claude/history.jsonl`), eight to a model call. It runs in the background and says what it
+filed when it is done; a prompt already filed is never filed twice.
 
 `/vocab` opens a pane with the cards that are due, one at a time:
 
@@ -107,7 +115,7 @@ It works from the next session, or after `/reload-plugins`.
 | `/prompt-en` | Turns the mod on or off (`/prompt-en on`, `/prompt-en off`); remembered across sessions |
 | `model` option | `haiku` by default; `sonnet` or `opus` |
 | `reviewEnglish` option | `true` by default; `false` keeps translations and drops the reviews of English |
-| `/vocab` | Reviews the vocabulary book's due cards in a pane; `/vocab list` lists the latest |
+| `/vocab` | Reviews the vocabulary book's due cards in a pane; `/vocab list` lists the latest; `/vocab import` files the prompts from before the book |
 | `collectVocab` option | `true` by default; `false` stops filling the vocabulary book and its extra call |
 
 Options are set in the plugin's options (`/config`).
@@ -132,7 +140,10 @@ wrote it.
   prompt text is read once: the answer is kept in the plugin store (the latest 300), so a
   resumed session shows it again and a repeated `继续` costs nothing.
 - With the vocabulary book on, a translation costs a second small request, to pick its phrases
-  (skipped for a prompt of a few characters). A review costs nothing more.
+  and pattern (skipped for a prompt of a few characters). A review costs nothing more.
+- `/vocab import` finds a translation's prompt only in the prompt history, so a prompt that held
+  a paste (shown there as `[Pasted text #1]`) or that is older than the 300 answers the store
+  keeps is left out.
 - The vocabulary book is kept in the plugin store, on this machine, up to 1,000 cards; past that
   the best-known oldest leave.
 - Your own words are sent up to 6,000 characters; past that the answer covers the start.
