@@ -10,6 +10,8 @@ no script, no settings to edit.
 ↑ 1.2M in  ↓ 35k out   cache 92%   $1.23   121 tok/s avg 129   TTFT 1.1s
 ```
 
+![The band above the prompt, updating while Claude works on a task](../docs/statusline/statusline-band.gif)
+
 | Figure | What it is |
 | --- | --- |
 | `✦ Opus 5.5 high` | The session's model, and the reasoning effort of the latest request |

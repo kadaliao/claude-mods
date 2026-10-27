@@ -9,6 +9,8 @@
 ↑ 1.2M in  ↓ 35k out   cache 92%   $1.23   121 tok/s avg 129   TTFT 1.1s
 ```
 
+![Claude 干活时，输入框上方的状态栏实时更新](../docs/statusline/statusline-band.gif)
+
 | 内容 | 含义 |
 | --- | --- |
 | `✦ Opus 5.5 high` | 当前会话的模型，以及最近一次请求的推理强度（effort） |

@@ -9,6 +9,8 @@ work in the status line under the prompt:
 ⚔ 本轮  ✎ 3 文件 +120 −30 · ⚡ 8 命令 1✗ · 📖 12 · ⏱ 1m05s
 ```
 
+![The tally under the prompt counting up while Claude edits two files and runs the tests](../docs/ambience/ambience-tally.gif)
+
 | Sound | When |
 | --- | --- |
 | click | A command starts (Bash) |

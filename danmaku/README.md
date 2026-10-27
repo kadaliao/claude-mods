@@ -13,6 +13,8 @@ test fails, "这波操作有点东西" when a small model finds the moment worth
 > _
 ```
 
+![Comments flying above the prompt while Claude edits a file and runs the tests](../docs/danmaku/danmaku-lanes.gif)
+
 The lanes take three rows, only while Claude works and for about 12 seconds after the last
 comment; then they fold away and the prompt has its room back. If another mod draws above the
 prompt too (the [statusline](../statusline/) band, say), the lanes go above it. statusline
