@@ -1,6 +1,6 @@
 {
   "name": "danmaku",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Bilibili-style bullet comments that fly across a few lanes above the prompt, heckling what Claude does as it works",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/danmaku",

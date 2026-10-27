@@ -40,6 +40,9 @@ const PALETTE = [undefined, undefined, undefined, undefined, 'claude', 'ide', 'm
 const HELLO = ['前排占座', '来了来了', '弹幕护体！']
 // The side pane of version 0.1, which a session that reloads into this one may still show.
 const OLD_PANE = 'danmaku'
+// When /danmaku is typed at the prompt yet the band above it never reached this module,
+// a mod drawn over it (statusline before 0.1.1) takes the band whole.
+const HIDDEN = '\n不过输入框上方被别的 mod 整块占了，弹幕显示不出来。用 statusline 的话，更新到 0.1.1 以上：claude plugin update statusline@kadaliao，然后重启。'
 
 const emptyBand: Band = { comments: [], seq: 0, isShown: false }
 const band = atom({ plugin: 'danmaku', key: 'band' } as const, emptyBand, { shape: 'band-1' })
@@ -344,7 +347,8 @@ export const register: Register = (on, options) => {
     }
     // One comment at once, so the lanes show where they are.
     await spawn($, [{ text: pick(HELLO) ?? HELLO[0] ?? '前排' }])
-    return { text: '弹幕已开启：Claude 干活时从输入框上方飘过。' }
+    const isHidden = e.origin.kind === 'composer' && !isDrawn
+    return { text: `弹幕已开启：Claude 干活时从输入框上方飘过。${isHidden ? HIDDEN : ''}` }
   })
 
   on('turn.start', async ($, e, next) => {

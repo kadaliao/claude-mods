@@ -220,6 +220,17 @@ test('/danmaku switches on with a comment, /danmaku <text> sends yours, /danmaku
   await ui.unmount()
 })
 
+test('/danmaku says so when a mod over the band keeps the lanes from drawing', async ($, on) => {
+  world(on, '', {})
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  // Nothing mounted: the band never reached danmaku, as under statusline 0.1.0.
+  expect((await $.command.run(run(''))).text).toContain('statusline@kadaliao')
+  await $.command.run(run('off'))
+  const ui = await $.ui.mount({ ...IDLE, surface: 'terminal' })
+  expect((await $.command.run(run(''))).text).not.toContain('statusline@kadaliao')
+  await ui.unmount()
+})
+
 test('a band an earlier version stored is declined', async ($, on) => {
   world(on)
   on('state.get', (_, e, next) =>

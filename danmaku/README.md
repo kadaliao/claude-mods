@@ -15,7 +15,9 @@ test fails, "这波操作有点东西" when a small model finds the moment worth
 
 The lanes take three rows, only while Claude works and for about 12 seconds after the last
 comment; then they fold away and the prompt has its room back. If another mod draws above the
-prompt too (the [statusline](../statusline/) band, say), the lanes go above it.
+prompt too (the [statusline](../statusline/) band, say), the lanes go above it. statusline
+before 0.1.1 takes that space whole and hides the lanes: update it, and `/danmaku` tells you
+when something is in the way.
 
 The comments are in Chinese, as on Bilibili.
 
