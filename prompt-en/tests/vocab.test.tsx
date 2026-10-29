@@ -133,11 +133,11 @@ test('a phrase is kept only where both texts hold it', () => {
     'PHRASE: 超时 => graceful shutdown',
     'PHRASE: 函数 => function',
   ].join('\n')
-  const picks = parsePicks(reply, [{ source: ZH, english: ZH_EN }])
+  const picks = parsePicks(reply, [{ source: ZH, target: ZH_EN }])
   expect(picks[0]?.map(f => [f.cue, f.answer])).toEqual([['顺便', "while you're at it"]])
-  expect(parsePicks('NONE', [{ source: ZH, english: ZH_EN }])).toEqual([[]])
+  expect(parsePicks('NONE', [{ source: ZH, target: ZH_EN }])).toEqual([[]])
   const hyphened = parsePicks('PHRASE: 过度设计 => over-engineered', [
-    { source: '有点过度设计了', english: 'It is a bit over-engineered.' },
+    { source: '有点过度设计了', target: 'It is a bit over-engineered.' },
   ])
   expect(hyphened[0]?.[0]?.answer).toBe('over-engineered')
 })
@@ -149,7 +149,7 @@ const PLAN_EN = `I have a script for the story, and Codex can generate images.${
 
 test('a phrase card holds the sentences its two sides stand in, not the prompt\'s start', () => {
   const [found] = parsePicks('PHRASE: 制定完善的开发计划 => draw up a solid development plan', [
-    { source: PLAN_ZH, english: PLAN_EN },
+    { source: PLAN_ZH, target: PLAN_EN },
   ])
   expect(found).toEqual([
     {
@@ -162,7 +162,7 @@ test('a phrase card holds the sentences its two sides stand in, not the prompt\'
   ])
 
   // English the person typed among their Chinese is no cue; the words around it are.
-  const mixed = { source: '要让人一眼就能 get 到重点', english: 'People should get the point at a glance.' }
+  const mixed = { source: '要让人一眼就能 get 到重点', target: 'People should get the point at a glance.' }
   const reply = 'PHRASE: get => get the point at a glance\nPHRASE: 一眼就能 get 到重点 => get the point at a glance'
   expect(parsePicks(reply, [mixed])[0]?.map(f => f.cue)).toEqual(['一眼就能 get 到重点'])
 })
@@ -183,8 +183,8 @@ test('an excerpt is the sentence that holds the words, cut around them when long
 
 test('a pattern is a sentence of both texts whose frame is its own words', () => {
   const items = [
-    { source: ZH, english: ZH_EN },
-    { source: ZH2, english: ZH2_EN },
+    { source: ZH, target: ZH_EN },
+    { source: ZH2, target: ZH2_EN },
   ]
   const reply = [
     "[1] PHRASE: 顺便 => while you're at it",
@@ -210,7 +210,7 @@ test('a pattern is a sentence of both texts whose frame is its own words', () =>
     // A sentence of neither text.
     '[1] PATTERN: 等一下 => Hold off on committing until the tests finish. => Hold off on ___ until ___',
   ].join('\n')
-  expect(parsePicks(bad, [{ source: ZH2, english: ZH2_EN }])).toEqual([[]])
+  expect(parsePicks(bad, [{ source: ZH2, target: ZH2_EN }])).toEqual([[]])
 })
 
 test('a card moves up a box when known, starts over when forgotten', () => {

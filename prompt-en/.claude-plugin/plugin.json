@@ -1,24 +1,31 @@
 {
   "name": "prompt-en",
-  "version": "0.3.2",
-  "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English, and a vocabulary book to review them",
+  "version": "0.4.0",
+  "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English, and a vocabulary book to review them. Or the same in Japanese",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/prompt-en",
   "repository": "https://github.com/kadaliao/claude-mods",
-  "keywords": ["translate", "english", "prompt", "vocabulary", "flashcards", "mod"],
+  "keywords": ["translate", "english", "japanese", "prompt", "vocabulary", "flashcards", "mod"],
   "types": "./types/index.d.ts",
   "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language to learn",
+      "description": "english: English under your prompts, and reviews of your English. japanese: Japanese under prompts in Chinese or English, and reviews of your Japanese",
+      "default": "english",
+      "options": ["english", "japanese"]
+    },
     "model": {
       "type": "string",
       "title": "Translation model",
-      "description": "The model that writes the English",
+      "description": "The model that writes the line under your prompts",
       "default": "haiku",
       "options": ["haiku", "sonnet", "opus"]
     },
     "reviewEnglish": {
       "type": "boolean",
-      "title": "Review English prompts",
-      "description": "Correct or polish prompts you write in English, or suggest other ways to say them",
+      "title": "Review what you write in it",
+      "description": "Correct or polish prompts you write in the language you learn (English or Japanese), or suggest other ways to say them",
       "default": true
     },
     "collectVocab": {

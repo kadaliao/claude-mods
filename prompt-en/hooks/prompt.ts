@@ -1,6 +1,9 @@
 // Reading a prompt: the person's own words, the pastes folded out of them, the
-// mode it gets and the key its answer is kept under. Shared by the English under
-// each prompt (register.tsx) and the vocabulary book (vocab.tsx).
+// mode it gets and the key its answer is kept under. Shared by the line under each
+// prompt (register.tsx) and the vocabulary book (vocab.tsx).
+
+import { countJapanese, isJapanese, nsOf } from './lang'
+import type { Lang } from './lang'
 
 // What is sent at most of the person's own words.
 const MAX_PROSE = 6000
@@ -9,11 +12,13 @@ const MAX_PROSE = 6000
 const MATERIAL_LINES = 8
 // So is a single line this long with no foreign letters and few spaces (minified JSON).
 const MATERIAL_LINE_CHARS = 400
-// An English prompt shorter than this many words ("ok", "commit it") is not reviewed.
+// An English prompt shorter than this many words ("ok", "commit it") gets nothing.
 const MIN_WORDS = 3
+// Nor does a Japanese one of fewer letters than this (はい, 続けて).
+const MIN_JAPANESE = 5
 
-// Where an answer is kept in the store.
-export const storeKey = (key: string) => `t:${key}`
+// Where an answer in a language is kept in the store.
+export const storeKey = (key: string, lang: Lang = 'en') => `${nsOf(lang)}t:${key}`
 
 // Letters outside the Latin script: Han, kana, Hangul, Cyrillic, Arabic, ...
 const FOREIGN = /[^\P{L}\p{Script=Latin}]/gu
@@ -35,6 +40,9 @@ export function ownWords(text: string): string {
 // Wide East Asian letters: two terminal cells each, and 2.5 English characters of meaning.
 export const WIDE =
   /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/g
+
+// Characters in English ones: a wide (CJK) letter counts 2.5.
+export const weightOf = (s: string) => Math.round(s.length + 1.5 * (s.match(WIDE)?.length ?? 0))
 
 const CODE_LINE =
   /^\s{2,}\S|[;{}()[\],=<>]\s*$|^\s*(\/\/|#|--|import |from |export |def |class |function |const |let |var |return |if |for |\$ |>>> |at |[\w.-]+:\d+)/
@@ -93,19 +101,27 @@ export function prepare(text: string): Prepared {
     .trim()
 
   const bare = folded.replace(MARKER, '').replace(/\s+/g, '')
-  const proseWeight = Math.round(bare.length + 1.5 * (bare.match(WIDE)?.length ?? 0))
+  const proseWeight = weightOf(bare)
   const isCut = folded.length > MAX_PROSE
   return { prose: isCut ? `${folded.slice(0, MAX_PROSE)}…` : folded, materials, proseChars: bare.length, proseWeight, isCut }
 }
 
 export type Mode = 'translate' | 'review'
 
-// What a prompt gets, judged by its own words (pastes left out): its English when
-// they hold foreign letters, a review when they are English of a few words or more.
-export function modeOf(text: string, prepared: Prepared = prepare(text)): Mode | null {
+const englishWords = (s: string) => s.match(/[A-Za-z][A-Za-z'’-]*/g)?.length ?? 0
+
+// What a prompt gets, judged by its own words (pastes left out). Learning English:
+// its English when they hold foreign letters, a review when they are English of a
+// few words or more. Learning Japanese: a review when they are Japanese, else (Chinese,
+// English of a few words) its Japanese.
+export function modeOf(text: string, prepared: Prepared = prepare(text), lang: Lang = 'en'): Mode | null {
   const words = prepared.prose.replace(MARKER, ' ')
+  if (lang === 'ja') {
+    if (isJapanese(words)) return countJapanese(words) >= MIN_JAPANESE ? 'review' : null
+    return countForeign(words) >= 2 || englishWords(words) >= MIN_WORDS ? 'translate' : null
+  }
   if (countForeign(words) >= 2) return 'translate'
-  return (words.match(/[A-Za-z][A-Za-z'’-]*/g)?.length ?? 0) >= MIN_WORDS ? 'review' : null
+  return englishWords(words) >= MIN_WORDS ? 'review' : null
 }
 
 // The key a prompt's answer is kept under: the same for the row and the submission.

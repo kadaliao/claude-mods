@@ -3,7 +3,8 @@
 English | [简体中文](README.zh-CN.md)
 
 A line of English under each prompt you send, drawn in the transcript. It scrolls with the
-conversation and takes no fixed space on screen.
+conversation and takes no fixed space on screen. Learning Japanese instead? The same works in
+Japanese: see [Learning Japanese](#learning-japanese).
 
 ![A Chinese prompt in Claude Code, with its English underneath](../docs/prompt-en/demo.gif)
 
@@ -31,6 +32,31 @@ differently, `✓` one that reads well. Terse chat style (lowercase, no final pe
 is not flagged.
 
 ![Two English prompts reviewed: other ways to say one, a correction of the other](../docs/prompt-en/review.png)
+
+## Learning Japanese
+
+Set the `language` option to `japanese` and the line under your prompts is Japanese:
+
+- **Written in Chinese or English**, the prompt gets its Japanese. It uses the words Japanese
+  engineers use (デプロイ, バグ, not kanji carried over from Chinese) and keeps your tone: plain
+  form for a curt request, です・ます for a polite one.
+- **Written in Japanese**, it gets a review, as English does: the prompt corrected, the changed
+  letters in green and the kind of change named in Chinese (助词, 用词, 动词变形…); or, when it
+  reads well, two other ways to say it.
+
+```
+> 以防万一，先把数据库备份一下
+  JA  念のため、先にデータベースのバックアップを取っておいてください。
+
+> ファイルを読み込みに失敗しました、原因を検査してください
+  JA ✎  ファイルの読み込みに失敗しました。原因を調べてください · 助词: "ファイルを読み込みに失敗" → "ファイルの読み込みに失敗"
+```
+
+A prompt with kana in it is Japanese (a stray の in Chinese is not); one of fewer than 5 Japanese
+letters (はい, 続けて) is left alone. The vocabulary book works the same way, in a book of its own,
+and a Japanese phrase card carries its reading, since kanji you read at sight can still be hard
+to say: `以防万一 → 念のため［ねんのため］`. What was kept for one language is never shown under
+the other, so switching back and forth loses nothing.
 
 ## Long prompts
 
@@ -145,8 +171,9 @@ then `/reload-plugins`. It only tells you; it never installs anything.
 | | |
 | --- | --- |
 | `/prompt-en` | Turns the mod on or off (`/prompt-en on`, `/prompt-en off`); remembered across sessions |
+| `language` option | `english` by default; `japanese` for Japanese under your prompts and reviews of your Japanese |
 | `model` option | `haiku` by default; `sonnet` or `opus` |
-| `reviewEnglish` option | `true` by default; `false` keeps translations and drops the reviews of English |
+| `reviewEnglish` option | `true` by default; `false` keeps translations and drops the reviews of your English (or Japanese) |
 | `/vocab` | Reviews the vocabulary book's due cards in a pane; `/vocab list` lists the latest; `/vocab import` files the prompts from before the book |
 | `collectVocab` option | `true` by default; `false` stops filling the vocabulary book and its extra call |
 
@@ -158,10 +185,12 @@ On `prompt.submit` the mod drops the `<system-reminder>` blocks a host adds for 
 (the desktop app puts one before the first prompt of a session with no folder), folds the
 prompt's pastes, and reads what is left, your own words.
 Letters outside the Latin script mean a translation; three or more English words, a review.
+Learning Japanese, kana mean a review, and anything else (Chinese, three or more English words)
+a translation.
 It sends one `$.model.complete` request without waiting, so the prompt goes on at once. The
 `UserMessage` render hook draws the engine's row, then the English below it: `translating…` or
 `reviewing…` while the request runs, then the answer. A review's changed words are found by a
-word diff against your prompt.
+word diff against your prompt (letter by letter in Japanese, which has no spaces).
 
 Nothing the mod writes is sent to the conversation's model, which reads your prompt as you
 wrote it.
@@ -183,7 +212,8 @@ wrote it.
 - Your own words are sent up to 6,000 characters; past that the answer covers the start.
 - A failed request leaves one dim line, `no translation (overloaded)` or `no review (…)`, with
   no retry. Submitting the same text again retries it.
-- The language is told by script: a prompt in French or Spanish is reviewed as English.
+- The language is told by script: a prompt in French or Spanish is reviewed as English, or,
+  learning Japanese, translated into Japanese.
 - Mods (function hooks) are an early-access API of Claude Code and may change between
   releases. Built and tested on Claude Code 2.1.308.
 

@@ -45,6 +45,8 @@ export type VocabCard = {
   why?: string
   // pattern: the frame, its changing parts as ___ ("Hold off on ___ until ___").
   pattern?: string
+  // phrase, in Japanese: the expression's reading in hiragana (念のため: ねんのため).
+  reading?: string
   // The sentence of the prompt it came from that holds the cue (a pattern's, with the
   // sentences either side), cut short around it. Before 0.3.1, the prompt's start.
   context?: string
