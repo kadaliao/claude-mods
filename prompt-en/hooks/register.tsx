@@ -323,6 +323,7 @@ export const register: Register = (on, options) => {
       name: 'prompt-en',
       description: 'Turn the English under your prompts on or off (translations, and reviews of your English)',
       argumentHint: '[on|off]',
+      immediate: true,
     })
     const saved = await $.store.get('enabled')
     if (typeof saved === 'boolean') await update($, isOn, () => saved)

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On } from 'claude-code'
+import type { EngineInterface, On, RenderNode } from 'claude-code'
 
 import type { Grade, Quiz, Translation, VocabCard } from '../types'
 import { countForeign, keyOf, modeOf, ownWords, prepare, storeKey, withLabels } from './prompt'
@@ -25,6 +25,8 @@ import { countForeign, keyOf, modeOf, ownWords, prepare, storeKey, withLabels } 
 // then the answer, and 1: 忘了  2: 模糊  3: 记得, which set when it is due again.
 
 const PANE = 'vocab'
+// The key of the pane's main control in every state: show the answer, known, more.
+export const MAIN = 'main'
 const TITLE = '生词本'
 const STORE_PREFIX = 'v:'
 // Days a card in each box waits before it is due again.
@@ -514,6 +516,8 @@ export async function startVocab($: EngineInterface): Promise<void> {
     name: 'vocab',
     description: 'Review the English prompt-en taught you, flashcard style (list: the latest cards; import: the prompts from before)',
     argumentHint: '[list|import]',
+    // Reviewing is for any moment, a turn in flight included: it never waits for one to end.
+    immediate: true,
   })
   void nudge($).catch(() => {})
 }
@@ -526,6 +530,22 @@ async function nudge($: EngineInterface): Promise<void> {
   if (due === 0) return
   await $.store.set('vocab:nudged', now)
   $.ui.toast(`生词本有 ${due} 条该复习了 · /vocab`)
+}
+
+// Waits before each ask for the keyboard after /vocab has run.
+const FOCUS_WAITS_MS = [30, 150, 500]
+
+// Gives the pane the keyboard, so its hotkeys work at once. The surface grants it
+// only over an empty prompt, and while /vocab runs the prompt may still hold the
+// command, so it is asked again after, until the pane has the keys or is closed.
+// Anything typed in the prompt meanwhile refuses it: the person's typing is never taken.
+async function takeKeys($: EngineInterface): Promise<void> {
+  for (const ms of FOCUS_WAITS_MS) {
+    await $.clock.sleep(ms)
+    const pane = (await $.ui.panes()).find(p => p.id === PANE)
+    if (pane === undefined || pane.isFocused) return
+    await $.ui.open({ id: PANE, title: TITLE, focus: true, closeOnEscape: true })
+  }
 }
 
 export function registerVocab(on: On, model: string): void {
@@ -551,6 +571,8 @@ export function registerVocab(on: On, model: string): void {
     }
     const q = await begin($, false)
     await $.ui.open({ id: PANE, title: TITLE, focus: true, closeOnEscape: true })
+    // On a timer, so it asks again once the command has run and the prompt is clear.
+    $.clock.after(0, () => void takeKeys($).catch(() => {}))
     if (q.deckSize === 0) return { text: EMPTY }
     return { text: q.cards.length ? `生词本：${q.cards.length} 张待复习。` : '生词本：今天没有到期的。' }
   })
@@ -561,6 +583,24 @@ export function registerVocab(on: On, model: string): void {
     const now = await $.clock.now()
     const width = Math.max(20, e.props.bodyColumns ?? 60)
     const close = <Text dimColor>Esc 关闭</Text>
+    // The row of controls. Its main one keeps one key and one place in every state of
+    // the pane, so the keyboard stays on it as cards turn: a control taken away from
+    // under the focus hands the keys back to the prompt, and the next hotkey would be
+    // typed there.
+    const controls = (main: RenderNode, before: RenderNode[] = [], after: RenderNode[] = []) => (
+      <Box columnGap={3} flexWrap="wrap">
+        {before[0] ?? false}
+        {before[1] ?? false}
+        {main}
+        {after[0] ?? false}
+        {after[1] ?? false}
+      </Box>
+    )
+    const mainButton = (label: string, hotkey: string, onPress: () => void) => (
+      <Button key={MAIN} plain hotkey={hotkey} autoFocus onPress={onPress}>
+        {label}
+      </Button>
+    )
 
     if (q === null || q.deckSize === 0) {
       return (
@@ -580,14 +620,16 @@ export function registerVocab(on: On, model: string): void {
           ? `今天没有要复习的。共 ${q.deckSize} 条${q.nextDue ? `，下一条 ${fmtWhen(q.nextDue, now)}到期` : ''}。`
           : `这一轮复习完了：记得 ${good} · 模糊 ${hard} · 忘了 ${again}。`
       return (
-        <Box flexDirection="column" rowGap={1}>
+        <Box flexDirection="column" rowGap={1} width={width}>
           <Text>{summary}</Text>
-          <Box columnGap={2}>
-            <Button key="ahead" plain hotkey="m" autoFocus onPress={() => void begin($, true)}>
-              再练几张
-            </Button>
-            {close}
-          </Box>
+          {/* Where a card's cue and answer stand, so the controls keep their place. */}
+          {false}
+          {false}
+          {controls(
+            mainButton('再练几张', 'm', () => void begin($, true)),
+            [],
+            [close],
+          )}
         </Box>
       )
     }
@@ -640,59 +682,52 @@ export function registerVocab(on: On, model: string): void {
           {row(isFix ? '你写的' : '中文　', card.cue)}
           {card.context !== undefined && row(isPattern ? '出自　' : '原句　', card.context, true, card.cue)}
         </Box>
-        {q.isRevealed ? (
-          <Box flexDirection="column" rowGap={1}>
-            <Box flexDirection="column">
+        {q.isRevealed && (
+          <Box flexDirection="column">
+            <Box columnGap={2}>
+              <Text dimColor>{isFix ? '更地道' : '英文　'}</Text>
+              <Box flexShrink={1}>
+                <Text color="success" bold>
+                  {card.answer}
+                  {card.why !== undefined && <Text dimColor bold={false}> · {card.why}</Text>}
+                </Text>
+              </Box>
+            </Box>
+            {isPattern && card.pattern !== undefined && (
               <Box columnGap={2}>
-                <Text dimColor>{isFix ? '更地道' : '英文　'}</Text>
+                <Text dimColor>句型　</Text>
                 <Box flexShrink={1}>
-                  <Text color="success" bold>
-                    {card.answer}
-                    {card.why !== undefined && <Text dimColor bold={false}> · {card.why}</Text>}
-                  </Text>
+                  <Text color="suggestion">{card.pattern}</Text>
                 </Box>
               </Box>
-              {isPattern && card.pattern !== undefined && (
-                <Box columnGap={2}>
-                  <Text dimColor>句型　</Text>
-                  <Box flexShrink={1}>
-                    <Text color="suggestion">{card.pattern}</Text>
-                  </Box>
-                </Box>
-              )}
-              {card.example !== undefined && row('例句　', card.example, true, card.answer, true)}
-            </Box>
-            <Box columnGap={3} flexWrap="wrap">
-              <Button key="again" plain hotkey="1" onPress={() => void grade($, at, 'again')}>
-                忘了
-              </Button>
-              <Button key="hard" plain hotkey="2" onPress={() => void grade($, at, 'hard')}>
-                模糊
-              </Button>
-              <Button key="good" plain hotkey="3" autoFocus onPress={() => void grade($, at, 'good')}>
-                记得
-              </Button>
-              <Button key="drop" plain hotkey="x" dimColor onPress={() => void drop($, at)}>
-                删掉这张
-              </Button>
-            </Box>
-          </Box>
-        ) : (
-          <Box columnGap={3}>
-            <Button
-              key="reveal"
-              plain
-              hotkey="f"
-              autoFocus
-              onPress={() =>
-                void update($, quiz, cur => (cur && cur.index === at ? { ...cur, isRevealed: true } : cur))
-              }
-            >
-              显示答案
-            </Button>
-            {close}
+            )}
+            {card.example !== undefined && row('例句　', card.example, true, card.answer, true)}
           </Box>
         )}
+        {q.isRevealed
+          ? controls(
+              mainButton('记得', '3', () => void grade($, at, 'good')),
+              [
+                <Button key="again" plain hotkey="1" onPress={() => void grade($, at, 'again')}>
+                  忘了
+                </Button>,
+                <Button key="hard" plain hotkey="2" onPress={() => void grade($, at, 'hard')}>
+                  模糊
+                </Button>,
+              ],
+              [
+                <Button key="drop" plain hotkey="x" dimColor onPress={() => void drop($, at)}>
+                  删掉这张
+                </Button>,
+              ],
+            )
+          : controls(
+              mainButton('显示答案', 'f', () =>
+                void update($, quiz, cur => (cur && cur.index === at ? { ...cur, isRevealed: true } : cur)),
+              ),
+              [],
+              [close],
+            )}
       </Box>
     )
   })

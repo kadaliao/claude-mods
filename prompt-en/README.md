@@ -83,7 +83,8 @@ kept as they stand, and the translations matched to your words in Claude Code's 
 (`~/.claude/history.jsonl`), eight to a model call. It runs in the background and says what it
 filed when it is done; a prompt already filed is never filed twice.
 
-`/vocab` opens a pane with the cards that are due, one at a time:
+`/vocab` opens a pane with the cards that are due, one at a time. It runs at once, even while
+Claude is working, and the pane takes the keyboard, so its keys work straight away:
 
 ```
 生词本  1 / 3 · 共 18 条

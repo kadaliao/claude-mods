@@ -1,6 +1,6 @@
 {
   "name": "prompt-en",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English, and a vocabulary book to review them",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/prompt-en",

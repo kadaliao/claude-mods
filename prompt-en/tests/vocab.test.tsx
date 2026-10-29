@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { keyOf } from '../hooks/prompt'
-import { cardId, excerpt, fromReview, parsePair, parsePicks, pick, schedule } from '../hooks/vocab'
+import { MAIN, cardId, excerpt, fromReview, parsePair, parsePicks, pick, schedule } from '../hooks/vocab'
 import type { Translation, VocabCard } from '../types'
 
 const USAGE = { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -21,17 +21,31 @@ function world(on: On, entries?: Record<string, unknown>, phrases = "PHRASE: 顺
   const clock = mock.clock(on, { now: NOW })
   mock.store(on, entries)
   const calls = { translate: 0, review: 0, phrases: 0 }
+  // Each command registered, and whether it runs mid-turn.
+  const immediate: Record<string, boolean> = {}
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('command.register', (_, e) => {
+    immediate[e.name] = e.immediate === true
+    return { value: { command: e.name } }
+  })
   on('prompt.submit', (_, e) => ({ text: e.text }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  // The asks for the pane's keyboard; the surface gives it at the third, as one would
+  // that refuses while the prompt still holds "/vocab".
+  const focus = { asks: 0 }
+  on('ui.open', (_, e) => {
+    if (e.focus) focus.asks++
+    return { value: { isPlaced: true } }
+  })
+  on('ui.panes', () => ({
+    value: [{ id: 'vocab', title: '生词本', isShown: true, isPlaced: true, isFocused: focus.asks >= 3 }],
+  }))
   on('model.complete', (_, e) => {
     const kind = e.system?.includes('worth learning') ? 'phrases' : e.system?.includes('coach') ? 'review' : 'translate'
     calls[kind]++
     const text = kind === 'phrases' ? phrases : kind === 'review' ? FIX : ZH_EN
     return { value: { isAnswered: true, text, usage: USAGE } }
   })
-  return { clock, calls }
+  return { clock, calls, immediate, focus }
 }
 
 async function start($: Engine) {
@@ -235,9 +249,9 @@ test('a corrected English prompt goes into the book, and /vocab reviews it', asy
   }
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'reveal' })
+  await ui.press({ key: MAIN })
   expect(await ui.find({ type: 'Text', text: /add a timeout/ })).toBeDefined()
-  await ui.press({ key: 'good' })
+  await ui.press({ key: MAIN })
   expect(await ui.find({ type: 'Text', text: /记得 1/ })).toBeDefined()
   await ui.unmount()
 
@@ -261,7 +275,7 @@ test('a forgotten card comes round again in the same sitting', async ($, on) => 
   await start($)
   await vocab($)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'reveal' })
+  await ui.press({ key: MAIN })
   await ui.press({ key: 'again' })
   expect(await ui.find({ type: 'Text', text: /2 \/ 2/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^add timeout$/ })).toBeDefined()
@@ -285,7 +299,7 @@ test('a card can be dropped from the book', async ($, on) => {
   await start($)
   await vocab($)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'reveal' })
+  await ui.press({ key: MAIN })
   await ui.press({ key: 'drop' })
   await ui.unmount()
   expect((await vocab($, 'list')).text).toContain('生词本还是空的')
@@ -311,6 +325,36 @@ test('due cards are mentioned once at the start, not at every session', async ($
   await start($)
   await start($)
   expect(toasts).toEqual(['生词本有 1 条该复习了 · /vocab'])
+})
+
+test('/vocab and /prompt-en run at once, even mid-turn', async ($, on) => {
+  const w = world(on)
+  await start($)
+  expect(w.immediate).toEqual({ 'prompt-en': true, vocab: true })
+})
+
+test('/vocab asks for the keyboard again until the pane has it', async ($, on) => {
+  const w = world(on, { 'v:c1': card() })
+  await start($)
+  await vocab($)
+  expect(w.focus.asks).toBe(1)
+  await w.clock.advance(5_000)
+  expect(w.focus.asks).toBe(3)
+})
+
+test('the main control keeps its key as the card turns, so the keyboard stays on it', async ($, on) => {
+  world(on, { 'v:c1': card(), 'v:c2': card({ id: 'c2', cue: 'more faster', answer: 'faster' }) })
+  await start($)
+  await vocab($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const labels: string[] = []
+  for (let i = 0; i < 5; i++) {
+    labels.push((await ui.find({ type: 'Button', key: MAIN }))?.text ?? '')
+    await ui.press({ key: MAIN })
+  }
+  labels.push((await ui.find({ type: 'Button', key: MAIN }))?.text ?? '')
+  expect(labels).toEqual(['显示答案', '记得', '显示答案', '记得', '再练几张', '显示答案'])
+  await ui.unmount()
 })
 
 // --- importing what came before ---------------------------------------------------------
@@ -383,7 +427,7 @@ test('a pattern card shows the sentence, then its English and the frame', async 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: new RegExp(`^${ZH2}$`) })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Hold off on ___/ })).toBeUndefined()
-  await ui.press({ key: 'reveal' })
+  await ui.press({ key: MAIN })
   expect(await ui.find({ type: 'Text', text: /^Hold off on ___ until ___$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^句型/ })).toBeDefined()
   await ui.unmount()
@@ -403,7 +447,7 @@ test('a phrase card marks its words in the sentence, and its English in the exam
   expect(cues.filter(t => t.props.bold === true)).toHaveLength(1)
   expect(await ui.find({ type: 'Text', text: /^然后跟我沟通/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^，然后跟我沟通确认之后再动手$/ })).toBeDefined()
-  await ui.press({ key: 'reveal' })
+  await ui.press({ key: MAIN })
   const answers = await ui.findAll({ type: 'Text', text: new RegExp(`^${answer}$`) })
   expect(answers.filter(t => t.props.color === 'success' && t.props.bold === true)).toHaveLength(2)
   expect(await ui.find({ type: 'Text', text: /^Then $/ })).toBeDefined()
