@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { hintFor } from '../hooks/register'
 import { JPEG, PNG, WIDE_PNG } from './fixtures'
 
 const VIEWPORT = { columns: 100, rows: 40, isFullscreen: false }
@@ -150,57 +151,61 @@ test('a resumed session draws the pictures it had read', async ($, on) => {
   await ui.unmount()
 })
 
-test('where the terminal draws no pictures, the row is left as it is', async ($, on) => {
+// Claude Code's reasons for drawing an Image's alt, as it words them.
+const UNNAMED = 'the Image draws its alt here: the terminal draws neither kitty placeholder images (probe: graphics reply OK, terminal herdr 0.9.5) nor iTerm2 inline images (yes only on an XTVERSION reply naming iTerm2 3.5 or later)'
+const UNASKED = 'the Image draws its alt here: the terminal draws neither kitty placeholder images (env: terminal=herdr, not asked yet, no answer) nor iTerm2 inline images (yes only on an XTVERSION reply naming iTerm2 3.5 or later, no answer)'
+const TMUX = 'the Image draws its alt here: images inside tmux need tmux 3.3 or later with allow-passthrough and focus-events on: run `tmux set -g allow-passthrough on` and `tmux set -g focus-events on`, detach and attach tmux again, then restart Claude Code'
+
+// A session on a terminal that refuses pictures for `deny`: the first picture's row, after the check.
+async function refused($: Engine, on: On, deny: string, told: string[] = []) {
   engine(on)
+  mock.store(on, told.length > 0 ? { told } : undefined)
   const clock = mock.clock(on)
-  on('ui.blit', () => ({ value: { deny: 'the Image draws its alt here: the terminal draws neither kitty placeholder images' } }))
+  on('ui.blit', () => ({ value: { deny } }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await returns($, 'toolu_10', 'Read', { file_path: '/work/e.png' }, PNG, 'image/png')
-
-  const ui = await $.ui.mount(toolRow('toolu_10', 'Read', { file_path: '/work/e.png' }))
-  expect(await ui.find({ type: 'Image' })).toBeDefined()
+  await returns($, 'toolu_20', 'Read', { file_path: '/work/f.png' }, PNG, 'image/png')
+  await returns($, 'toolu_21', 'Read', { file_path: '/work/g.png' }, JPEG, 'image/jpeg')
+  const first = await $.ui.mount(toolRow('toolu_20', 'Read', { file_path: '/work/f.png' }))
+  expect(await first.find({ type: 'Image' })).toBeDefined()
   await clock.advance(1000)
-  expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
-  await ui.unmount()
-})
+  return first
+}
 
-test('where Claude Code does not recognise a terminal that draws pictures, one row says how to see them', async ($, on) => {
-  engine(on)
-  const clock = mock.clock(on)
-  on('ui.blit', () => ({
-    value: {
-      deny: 'the Image draws its alt here: the terminal draws neither kitty placeholder images (probe: graphics reply OK, terminal herdr 0.9.5) nor iTerm2 inline images (yes only on an XTVERSION reply naming iTerm2 3.5 or later)',
-    },
-  }))
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await returns($, 'toolu_11', 'Read', { file_path: '/work/f.png' }, PNG, 'image/png')
-  await returns($, 'toolu_12', 'Read', { file_path: '/work/g.png' }, JPEG, 'image/jpeg')
-
-  const first = await $.ui.mount(toolRow('toolu_11', 'Read', { file_path: '/work/f.png' }))
-  await clock.advance(1000)
+test('herdr, unrecognised: the first row says how to turn pictures on, the rest stay as they are', async ($, on) => {
+  const first = await refused($, on, UNASKED)
   expect(await first.find({ type: 'Image' })).toBeUndefined()
-  expect((await first.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1/ }))?.text).toBe(
-    '看原图：用 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 启动 Claude Code',
+  expect((await first.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES/ }))?.text).toBe(
+    '图片没显示（终端：herdr）。如果它支持 kitty 图片协议，在 ~/.claude/settings.json 的 env 里加上 "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1"，重启 Claude Code',
   )
-  const second = await $.ui.mount(toolRow('toolu_12', 'Read', { file_path: '/work/g.png' }))
+  const second = await $.ui.mount(toolRow('toolu_21', 'Read', { file_path: '/work/g.png' }))
   expect(await second.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
   await first.unmount()
   await second.unmount()
 })
 
-test('a terminal that draws no pictures at all gets no hint', async ($, on) => {
-  engine(on)
-  const clock = mock.clock(on)
-  on('ui.blit', () => ({
-    value: {
-      deny: 'the Image draws its alt here: the terminal draws neither kitty placeholder images (probe: no reply to the graphics query) nor iTerm2 inline images (yes only on an XTVERSION reply naming iTerm2 3.5 or later)',
-    },
-  }))
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await returns($, 'toolu_13', 'Read', { file_path: '/work/h.png' }, PNG, 'image/png')
+test('a terminal that answered the graphics query gets the hint too, naming it', async ($, on) => {
+  const first = await refused($, on, UNNAMED)
+  expect((await first.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES/ }))?.text).toContain('终端：herdr 0.9.5')
+  await first.unmount()
+})
 
-  const ui = await $.ui.mount(toolRow('toolu_13', 'Read', { file_path: '/work/h.png' }))
-  await clock.advance(1000)
-  expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
-  await ui.unmount()
+test('a terminal told before is not told again', async ($, on) => {
+  const first = await refused($, on, UNASKED, ['herdr'])
+  expect(await first.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
+  await first.unmount()
+})
+
+test('inside tmux the hint is what tmux needs', async ($, on) => {
+  const first = await refused($, on, TMUX)
+  expect((await first.find({ type: 'Text', text: /allow-passthrough/ }))?.text).toBe(`图片没显示：${TMUX.slice(30)}`)
+  await first.unmount()
+})
+
+test('hints by terminal', () => {
+  expect(hintFor(UNASKED)?.terminal).toBe('herdr')
+  expect(hintFor('the Image draws its alt here: the terminal draws neither kitty placeholder images (env: terminal=iTerm.app, not asked yet) nor iTerm2 inline images (x)')?.text).toBe(
+    'iTerm2 要在全屏模式下才能显示图片：输入 /tui fullscreen',
+  )
+  expect(hintFor('the Image draws its alt here: the terminal draws neither kitty placeholder images (env: terminal=unknown, not asked yet) nor iTerm2 inline images (x)')?.terminal).toBe('这个终端')
+  expect(hintFor('the Image draws its alt here: every 8-bit image id is in use')).toBeUndefined()
 })

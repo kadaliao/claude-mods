@@ -11,9 +11,8 @@ export type Shot = {
 }
 
 // Whether the terminal draws pictures, as found out this session; `hintAt` is
-// the row that says how to see them, when the terminal could draw them but
-// Claude Code did not recognise it.
-export type Probe = { canDraw: 'unknown' | 'yes' | 'no'; hintAt?: string }
+// the row that says how to get them (`hint`), the first time on this terminal.
+export type Probe = { canDraw: 'unknown' | 'yes' | 'no'; hintAt?: string; hint?: string }
 
 declare module 'claude-code' {
   interface PluginState {

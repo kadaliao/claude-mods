@@ -39,13 +39,17 @@ claude plugin install peek@kadaliao
 
 图用的是终端自己的图片功能：kitty、Ghostty、全屏模式（`/tui fullscreen`）下的 iTerm2 3.5 及以上，以及在这些终端里运行、开了 `allow-passthrough` 和 `focus-events` 的 tmux 3.3 及以上。其他终端里 peek 什么都不加，对话照 Claude Code 原样显示。
 
-能不能画，peek 在每个会话的第一张图时自己判断。有些终端能画图片，但 Claude Code 不认识它（比如 herdr 这类终端复用器）。这时第一张图那一行下面会多一行：
+能不能画，peek 在每个会话的第一张图时自己判断。Claude Code 只对认识的终端打开图片功能；遇到不认识的终端，peek 在第一张图那一行下面说一次该怎么办，同一个终端以后不再重复：
 
-```
-看原图：用 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 启动 Claude Code
-```
+- 能画 kitty 图片、但 Claude Code 不认识的终端（比如 herdr 这类终端复用器）：在 Claude Code 启动前设好 `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`。一劳永逸的办法是写进 `~/.claude/settings.json`：
 
-照着做（`CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 claude`）就能看到原图。
+  ```json
+  { "env": { "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" } }
+  ```
+
+  只对一次会话生效的办法是 `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 claude`。写进 settings 后，Claude Code 在所有终端里都会按能画图处理，所以只在你用的终端都支持 kitty 图片时这样设。mod 没法替你设：Claude Code 在任何 mod 运行之前就已经决定了。
+- iTerm2：要在全屏模式下才能显示图片，输入 `/tui fullscreen`。
+- tmux：按 Claude Code 给出的要求设置（tmux 3.3 及以上，打开 `allow-passthrough` 和 `focus-events`）。
 
 ## 选项
 

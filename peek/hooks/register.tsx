@@ -63,6 +63,24 @@ async function rebuild($: EngineInterface): Promise<void> {
   await add($, found.slice(-KEEP))
 }
 
+// What to tell the person when Claude Code drew a picture's alt in its place,
+// from the reason it gave: the terminal it saw, and how to get pictures there.
+// Claude Code turns pictures on only for terminals it recognises (kitty,
+// Ghostty, iTerm2 in fullscreen); one that draws them but goes unrecognised
+// (herdr, say) needs the variable set before Claude Code starts.
+export function hintFor(deny: string): { terminal: string; text: string } | undefined {
+  const reason = deny.replace(/^the Image draws its alt here: /, '')
+  if (/^images inside tmux/.test(reason)) return { terminal: 'tmux', text: `图片没显示：${reason}` }
+  if (!/neither kitty placeholder images/.test(reason)) return undefined
+  const named = /(?:terminal=|, terminal )([^,)]+)/.exec(reason)?.[1]?.trim()
+  const terminal = named === undefined || named === '' || named === 'unknown' ? '这个终端' : named
+  if (/^iterm/i.test(terminal)) return { terminal, text: 'iTerm2 要在全屏模式下才能显示图片：输入 /tui fullscreen' }
+  return {
+    terminal,
+    text: `图片没显示（终端：${terminal}）。如果它支持 kitty 图片协议，在 ~/.claude/settings.json 的 env 里加上 "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1"，重启 Claude Code`,
+  }
+}
+
 // Asks the terminal, through a blit of the last Image drawn, whether it draws
 // pictures; the answer stands for the session.
 async function probe($: EngineInterface): Promise<void> {
@@ -75,10 +93,16 @@ async function probe($: EngineInterface): Promise<void> {
     if (r.deny === undefined) {
       await update($, probeState, (): Probe => ({ canDraw: 'yes' }))
     } else if (/draws its alt/.test(r.deny)) {
-      // The terminal answered the graphics query, but Claude Code turns pictures
-      // on only for terminals it names (kitty, Ghostty): the row says how to force them.
-      const isUnnamed = /graphics reply OK, terminal [^)]+\)/.test(r.deny)
-      await update($, probeState, (): Probe => (isUnnamed ? { canDraw: 'no', hintAt: shot.requestId } : { canDraw: 'no' }))
+      // Said once per terminal, ever: the person learns it, and is not told again.
+      const hint = hintFor(r.deny)
+      const told = await $.store.get('told')
+      const toldList = Array.isArray(told) ? told.filter(t => typeof t === 'string') : []
+      if (hint !== undefined && !toldList.includes(hint.terminal)) {
+        await $.store.set('told', [...toldList, hint.terminal])
+        await update($, probeState, (): Probe => ({ canDraw: 'no', hintAt: shot.requestId, hint: hint.text }))
+      } else {
+        await update($, probeState, (): Probe => ({ canDraw: 'no' }))
+      }
     }
     // Anything else (no longer mounted, resized) is asked again on a later tick.
   } finally {
@@ -139,14 +163,14 @@ export const register: Register = (on, options) => {
     return <Image key={key} source={d.source} columns={d.columns} rows={d.rows} alt={`[图片${s.label ? ` ${s.label}` : ''}${size}]`} />
   }
 
-  // Under the one row the probe drew with: how to see the pictures, where the
-  // terminal could draw them but Claude Code did not recognise it.
+  // Under the one row the probe drew with, the first time on this terminal: how
+  // to get the pictures drawn.
   const hintOf = (els: Terminal, requestId: string, p: Probe): RenderNode | false => {
-    if (p.canDraw !== 'no' || p.hintAt !== requestId) return false
+    if (p.canDraw !== 'no' || p.hintAt !== requestId || p.hint === undefined) return false
     const { Box, Text } = els
     return (
       <Box paddingLeft={INDENT}>
-        <Text dimColor>看原图：用 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 启动 Claude Code</Text>
+        <Text dimColor>{p.hint}</Text>
       </Box>
     )
   }

@@ -46,16 +46,24 @@ rendering (`/tui fullscreen`), and tmux 3.3 or later in one of those, with `allo
 and `focus-events` on. On any other terminal peek adds nothing, and the rows stay as Claude Code
 draws them.
 
-It finds out by itself, on the first picture of a session. Some terminals draw pictures but
-Claude Code does not recognise them (a terminal multiplexer such as herdr, say): there the first
-picture's row gets one line under it,
+It finds out by itself, on the first picture of a session. Claude Code turns pictures on only for
+terminals it recognises; on one it does not, peek says once, under the first picture's row, what
+to do there, and not again on that terminal:
 
-```
-看原图：用 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 启动 Claude Code
-```
+- A terminal that draws kitty pictures but goes unrecognised (a terminal multiplexer such as
+  herdr, say): set `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1` before Claude Code starts. Once for good,
+  in `~/.claude/settings.json`:
 
-which means: start Claude Code with that variable set (`CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1
-claude`) to see the pictures themselves.
+  ```json
+  { "env": { "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" } }
+  ```
+
+  or for one session, `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 claude`. It applies to every terminal
+  Claude Code then runs in, so set it in settings only where they all draw kitty pictures. A mod
+  cannot set it for you: Claude Code decides before any mod runs.
+- iTerm2: pictures need fullscreen rendering, `/tui fullscreen`.
+- tmux: what Claude Code says tmux needs (`allow-passthrough` and `focus-events` on, tmux 3.3 or
+  later).
 
 ## Options
 
