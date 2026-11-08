@@ -1,5 +1,4 @@
-// Turns a picture's bytes into what the terminal draws: an Image source, or the
-// cells of a Raster of half blocks where the terminal cannot draw pictures.
+// Turns a picture's bytes into the source of an Image, at the size it is drawn.
 
 import type { ImageSource } from 'claude-code'
 
@@ -13,13 +12,9 @@ const IMAGE_SIDE = 2048
 // Pixels asked per cell for an Image: enough to look sharp on most screens.
 const CELL_W = 12
 const CELL_H = 24
-// What a transparent pixel is laid over in blocks.
-const BACKDROP = [0x1c, 0x1c, 0x1c]
-const HALF_BLOCK = 0x2580 // ▀: its top half is the foreground, its bottom the background
 
 export type Drawn =
   | { kind: 'image'; source: ImageSource; columns: number; rows: number }
-  | { kind: 'blocks'; cells: string; columns: number; rows: number }
   | { kind: 'none'; reason: string }
 
 export function base64ToBytes(s: string): Uint8Array {
@@ -133,33 +128,13 @@ export function scale(src: Rgba, dw: number, dh: number): Rgba {
   return { width: dw, height: dh, data: out }
 }
 
-// The cells of a Raster showing `px` (already `columns` × `rows * 2` pixels).
-export function blockCells(px: Rgba, columns: number, rows: number): string {
-  const words = new Uint32Array(columns * rows * 3)
-  const color = (i: number) => {
-    const d = px.data
-    const a = d[i + 3]
-    const mix = (c: number, k: number) => Math.round((c * a + BACKDROP[k] * (255 - a)) / 255)
-    return (mix(d[i], 0) << 16) | (mix(d[i + 1], 1) << 8) | mix(d[i + 2], 2)
-  }
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < columns; x++) {
-      const w = (y * columns + x) * 3
-      words[w] = HALF_BLOCK
-      words[w + 1] = color(((2 * y) * columns + x) * 4)
-      words[w + 2] = color(((2 * y + 1) * columns + x) * 4)
-    }
-  }
-  return bytesToBase64(new Uint8Array(words.buffer))
-}
-
-// Drawn results by picture, look and size; each costs a decode.
+// Drawn results by picture and size; each costs a decode.
 const cache = new Map<string, Drawn>()
 let cachedChars = 0
 const CACHE_CHARS = 48 * 1024 * 1024
 
 function remember(key: string, drawn: Drawn): Drawn {
-  const size = (d: Drawn) => (d.kind === 'blocks' ? d.cells.length : d.kind === 'image' && 'rgba' in d.source ? d.source.rgba.length : 0)
+  const size = (d: Drawn) => (d.kind === 'image' && 'rgba' in d.source ? d.source.rgba.length : 0)
   cache.set(key, drawn)
   cachedChars += size(drawn)
   for (const [k, d] of cache) {
@@ -180,26 +155,22 @@ export function forgetAll(): void {
 }
 
 // What to draw for picture `id` (`data` its base64 bytes) in a box of
-// `columns` × `rows` cells.
-export function draw(
-  id: string,
-  mime: string,
-  data: string,
-  look: 'image' | 'blocks',
-  columns: number,
-  rows: number,
-): Drawn {
-  const key = `${id}|${look}|${columns}x${rows}`
+// `columns` × `rows` cells: a PNG as it is, anything larger than an Image takes
+// or a JPEG decoded and shrunk to the box.
+export function draw(id: string, mime: string, data: string, columns: number, rows: number): Drawn {
+  const key = `${id}|${columns}x${rows}`
   const hit = cache.get(key)
   if (hit !== undefined) return hit
   try {
-    if (look === 'image' && mime === 'image/png' && (data.length * 3) / 4 <= IMAGE_BYTES) {
-      return remember(key, { kind: 'image', source: { png: data }, columns, rows })
+    // A PNG not much larger than the box goes as it is; a larger one is shrunk,
+    // so a thumbnail does not send the terminal the whole screenshot.
+    if (mime === 'image/png' && (data.length * 3) / 4 <= IMAGE_BYTES) {
+      const head = pngSize(base64ToBytes(data.slice(0, 44)))
+      if (head !== undefined && head.width <= columns * CELL_W * 1.5 && head.height <= rows * CELL_H * 1.5) {
+        return remember(key, { kind: 'image', source: { png: data }, columns, rows })
+      }
     }
     const src = decode(mime, base64ToBytes(data))
-    if (look === 'blocks') {
-      return remember(key, { kind: 'blocks', cells: blockCells(scale(src, columns, rows * 2), columns, rows), columns, rows })
-    }
     const k = Math.min(
       1,
       (columns * CELL_W) / src.width,

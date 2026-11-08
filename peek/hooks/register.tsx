@@ -18,7 +18,6 @@ const shots = atom({ plugin: 'peek', key: 'shots' } as const, [])
 const probeState = atom({ plugin: 'peek', key: 'probe' } as const, { canDraw: 'unknown' }, { shape: 'probe-1' })
 
 type Terminal = Elements['terminal']
-type Look = 'image' | 'blocks'
 type Shown = Shot & { data?: string }
 
 // Bytes by picture id, oldest first. Kept in the module, not in state: a
@@ -118,30 +117,32 @@ async function shownFor($: EngineInterface, callId: string | undefined, tool: st
 }
 
 export const register: Register = (on, options) => {
-  const setting = options.picture === 'image' || options.picture === 'blocks' ? options.picture : 'auto'
   const isLarge = options.size === 'large'
 
-  const lookOf = (p: Probe): Look => (setting !== 'auto' ? setting : p.canDraw === 'no' ? 'blocks' : 'image')
+  // The box each picture may take: one picture, or each of several side by side.
+  const boxOf = (room: number, count: number, isBig: boolean): { maxCols: number; maxRows: number } => {
+    if (isBig) return { maxCols: room, maxRows: 30 }
+    if (count > 1) return isLarge ? { maxCols: 28, maxRows: 6 } : { maxCols: 20, maxRows: 4 }
+    return isLarge ? { maxCols: room, maxRows: 16 } : { maxCols: Math.min(room, 36), maxRows: 5 }
+  }
 
-  // One picture in a box of at most `maxCols` × `maxRows` cells, drawn as the
-  // terminal can.
+  // One picture in a box of at most `maxCols` × `maxRows` cells.
   const pictureOf = (els: Terminal, requestId: string, s: Shown, p: Probe, maxCols: number, maxRows: number): RenderNode => {
-    const { Text, Image, Raster } = els
+    const { Text, Image } = els
     if (s.data === undefined) return <Text dimColor>（这张图太早，已经不在内存里了）</Text>
     const { columns, rows } = fit(s.width, s.height, maxCols, maxRows)
-    const d = draw(s.id, s.mime, s.data, lookOf(p), columns, rows)
+    const d = draw(s.id, s.mime, s.data, columns, rows)
     if (d.kind === 'none') return <Text dimColor>（{d.reason}）</Text>
-    if (d.kind === 'blocks') return <Raster key={`ras-${s.id}`} columns={d.columns} rows={d.rows} cells={d.cells} />
     const key = `img-${s.id}`
     if (p.canDraw === 'unknown') lastShot = { requestId, key, source: d.source }
     const size = s.width > 0 && s.height > 0 ? ` ${s.width}×${s.height}` : ''
     return <Image key={key} source={d.source} columns={d.columns} rows={d.rows} alt={`[图片${s.label ? ` ${s.label}` : ''}${size}]`} />
   }
 
-  // Under the one row the probe drew with: how to see the pictures themselves,
-  // where the terminal could draw them but Claude Code did not recognise it.
+  // Under the one row the probe drew with: how to see the pictures, where the
+  // terminal could draw them but Claude Code did not recognise it.
   const hintOf = (els: Terminal, requestId: string, p: Probe): RenderNode | false => {
-    if (p.hintAt !== requestId || lookOf(p) !== 'blocks') return false
+    if (p.canDraw !== 'no' || p.hintAt !== requestId) return false
     const { Box, Text } = els
     return (
       <Box paddingLeft={INDENT}>
@@ -187,29 +188,28 @@ export const register: Register = (on, options) => {
   })
 
   // The pictures under each tool row that returned some; ctrl+o draws them large.
+  // Where the terminal draws no pictures the row is left as it is.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (e.surface !== 'terminal' || e.props.isRunning || e.props.isErrored) return next(e)
     const shown = await shownFor($, e.props.tool_use_id, e.props.tool, e.props.output)
     if (shown.length === 0) return next(e)
-    const els = $.ui.resolve(e)
-    const { Box } = els
     const p = await read($, probeState)
+    const els = $.ui.resolve(e)
+    const hint = hintOf(els, e.requestId, p)
+    if (p.canDraw === 'no' && hint === false) return next(e)
+    const { Box } = els
     const room = Math.max(20, (e.viewport?.columns ?? 80) - INDENT - 1)
-    const isBig = e.props.isExpanded === true
-    let maxCols = isBig || isLarge ? room : Math.min(room, 48)
-    let maxRows = isBig ? 30 : isLarge ? 16 : 8
-    if (shown.length > 1 && !isBig) {
-      maxCols = Math.min(maxCols, 32)
-      maxRows = Math.min(maxRows, 6)
-    }
+    const { maxCols, maxRows } = boxOf(room, shown.length, e.props.isExpanded === true)
     const row = await next(e)
     return (
       <Box flexDirection="column">
         {row}
-        <Box paddingLeft={INDENT} flexWrap="wrap" columnGap={1}>
-          {shown.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
-        </Box>
-        {hintOf(els, e.requestId, p)}
+        {p.canDraw !== 'no' && (
+          <Box paddingLeft={INDENT} flexWrap="wrap" columnGap={1}>
+            {shown.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
+          </Box>
+        )}
+        {hint}
       </Box>
     )
   })
@@ -223,27 +223,29 @@ export const register: Register = (on, options) => {
       shown.push(...(await shownFor($, c.tool_use_id, c.tool, c.output)))
     }
     if (shown.length === 0) return next(e)
-    const els = $.ui.resolve(e)
-    const { Box, Text } = els
     const p = await read($, probeState)
+    const els = $.ui.resolve(e)
+    const hint = hintOf(els, e.requestId, p)
+    if (p.canDraw === 'no' && hint === false) return next(e)
+    const { Box, Text } = els
     const room = Math.max(20, (e.viewport?.columns ?? 80) - INDENT - 1)
-    const isOne = shown.length === 1
-    const maxCols = isOne ? (isLarge ? room : Math.min(room, 48)) : 24
-    const maxRows = isOne ? (isLarge ? 16 : 8) : 6
+    const { maxCols, maxRows } = boxOf(room, shown.length, false)
     const thumbs = shown.slice(-GROUP_THUMBS)
     const row = await next(e)
     return (
       <Box flexDirection="column">
         {row}
-        <Box paddingLeft={INDENT} flexWrap="wrap" columnGap={1}>
-          {thumbs.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
-        </Box>
-        {hintOf(els, e.requestId, p)}
-        {shown.length > thumbs.length && (
+        {p.canDraw !== 'no' && (
+          <Box paddingLeft={INDENT} flexWrap="wrap" columnGap={1}>
+            {thumbs.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
+          </Box>
+        )}
+        {p.canDraw !== 'no' && shown.length > thumbs.length && (
           <Box paddingLeft={INDENT}>
             <Text dimColor>还有 {shown.length - thumbs.length} 张，ctrl+o 展开查看</Text>
           </Box>
         )}
+        {hint}
       </Box>
     )
   })

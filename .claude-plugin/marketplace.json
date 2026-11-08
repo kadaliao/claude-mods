@@ -29,7 +29,7 @@
     {
       "name": "peek",
       "source": "./peek",
-      "description": "See the pictures Claude looks at: a thumbnail under each Read or screenshot in the conversation, large under ctrl+o. Real pictures where the terminal draws them, coloured blocks elsewhere"
+      "description": "See the pictures Claude looks at: a thumbnail under each Read or screenshot in the conversation, large under ctrl+o, drawn with the terminal's own pictures"
     }
   ]
 }

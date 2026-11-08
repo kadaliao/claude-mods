@@ -34,21 +34,21 @@ There is nothing to type after that: the next picture Claude reads shows up unde
 
 ## Use
 
-- **One picture**: a thumbnail about 8 rows tall under the row that returned it.
+- **One picture**: a thumbnail about 5 rows tall under the row that returned it.
 - **Several Reads folded into one line** ("Read 3 files"): their thumbnails side by side under
-  that line, up to 12.
+  that line, 4 rows each, up to 12.
 - **ctrl+o**: the expanded transcript draws every picture large, up to 30 rows and the full width.
 
-## Real pictures or coloured blocks
+## Terminals
 
-peek draws the picture itself where the terminal can: kitty, Ghostty, iTerm2 3.5 or later under
-fullscreen rendering (`/tui fullscreen`), and tmux 3.3 or later in one of those, with
-`allow-passthrough` and `focus-events` on. Elsewhere it draws coloured blocks (two pixels a
-character), which show the layout and colours but not text.
+The pictures are the terminal's own: kitty, Ghostty, iTerm2 3.5 or later under fullscreen
+rendering (`/tui fullscreen`), and tmux 3.3 or later in one of those, with `allow-passthrough`
+and `focus-events` on. On any other terminal peek adds nothing, and the rows stay as Claude Code
+draws them.
 
 It finds out by itself, on the first picture of a session. Some terminals draw pictures but
 Claude Code does not recognise them (a terminal multiplexer such as herdr, say): there the first
-picture comes with one line under it,
+picture's row gets one line under it,
 
 ```
 看原图：用 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 启动 Claude Code
@@ -61,10 +61,9 @@ claude`) to see the pictures themselves.
 
 | Option | Values | Default |
 | --- | --- | --- |
-| `size` | `small` (about 8 rows), `large` (up to 16 rows, the full width) | `small` |
-| `picture` | `auto`, `image` (always the terminal's pictures), `blocks` (always blocks) | `auto` |
+| `size` | `small` (about 5 rows), `large` (up to 16 rows, the full width) | `small` |
 
-Set them in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek`.
+Set it in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek`.
 
 ## How it works
 
@@ -72,8 +71,8 @@ Set them in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek
   filed under that tool call, and the row's drawing reads them from there. A resumed session reads
   them back from the conversation.
 - A mod has no image library, so peek carries its own decoders: PNG (with its own inflate) and
-  JPEG (the decoder of [jpeg-js](https://github.com/jpeg-js/jpeg-js), from pdf.js). A picture is
-  decoded once per size it is drawn at.
+  JPEG (the decoder of [jpeg-js](https://github.com/jpeg-js/jpeg-js), from pdf.js). A picture
+  larger than its box is shrunk before it goes to the terminal, once per size it is drawn at.
 - Nothing leaves your machine and no model is called.
 
 ## Limits
@@ -81,8 +80,8 @@ Set them in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek
 - WebP and GIF pictures are not drawn: a line says so in their place.
 - The bytes of the last 100 pictures of a session are kept; an older row says it let them go.
 - Outside fullscreen, rows already printed to the terminal stay as they were drawn. On a terminal
-  that draws no pictures, the first one can stay as a `[图片 …]` line, as the switch to blocks
-  comes a second later.
+  that draws no pictures, the first picture can stay as a `[图片 …]` line, as the check takes a
+  second.
 - Drawn on the terminal only. Mods (function hooks) are an early-access API of Claude Code and may
   change between releases. Built and tested on Claude Code 2.1.319.
 

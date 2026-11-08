@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { JPEG, PNG } from './fixtures'
+import { JPEG, PNG, WIDE_PNG } from './fixtures'
 
 const VIEWPORT = { columns: 100, rows: 40, isFullscreen: false }
 
@@ -78,6 +78,20 @@ test('a screenshot JPEG is decoded into pixels for the Image', async ($, on) => 
   await ui.unmount()
 })
 
+test('a PNG larger than its thumbnail is sent shrunk, not whole', async ($, on) => {
+  engine(on)
+  await returns($, 'toolu_14', 'Read', { file_path: '/work/wide.png' }, WIDE_PNG, 'image/png')
+
+  const ui = await $.ui.mount(toolRow('toolu_14', 'Read', { file_path: '/work/wide.png' }))
+  const image = await ui.find({ type: 'Image' })
+  expect(image?.props).toMatchObject({ columns: 20, rows: 5 })
+  const source = image?.props.source as { png?: string; rgba?: string; width?: number; height?: number }
+  expect(source.png).toBeUndefined()
+  expect(source.width).toBe(240)
+  expect(source.height).toBe(120)
+  await ui.unmount()
+})
+
 test('ctrl+o draws the picture larger', async ($, on) => {
   engine(on)
   // A Read's own result, saying the picture is 1600×800.
@@ -85,21 +99,11 @@ test('ctrl+o draws the picture larger', async ($, on) => {
   const input = { file_path: '/work/wide.png' }
 
   const small = await $.ui.mount(toolRow('toolu_3', 'Read', input, { output }))
-  expect((await small.find({ type: 'Image' }))?.props).toMatchObject({ columns: 32, rows: 8 })
+  expect((await small.find({ type: 'Image' }))?.props).toMatchObject({ columns: 20, rows: 5 })
   await small.unmount()
   const big = await $.ui.mount(toolRow('toolu_3', 'Read', input, { output, isExpanded: true }))
   expect((await big.find({ type: 'Image' }))?.props).toMatchObject({ columns: 94, rows: 24 })
   await big.unmount()
-})
-
-test('the blocks setting draws coloured blocks', { options: { picture: 'blocks' } }, async ($, on) => {
-  engine(on)
-  await returns($, 'toolu_4', 'Read', { file_path: '/work/a.png' }, PNG, 'image/png')
-
-  const ui = await $.ui.mount(toolRow('toolu_4', 'Read', { file_path: '/work/a.png' }))
-  expect(await ui.find({ type: 'Image' })).toBeUndefined()
-  expect((await ui.find({ type: 'Raster' }))?.props.columns).toBe(2)
-  await ui.unmount()
 })
 
 test('a Read the mod did not see draws from its own result', async ($, on) => {
@@ -146,7 +150,7 @@ test('a resumed session draws the pictures it had read', async ($, on) => {
   await ui.unmount()
 })
 
-test('where the terminal draws only the alt, the pictures turn to blocks', async ($, on) => {
+test('where the terminal draws no pictures, the row is left as it is', async ($, on) => {
   engine(on)
   const clock = mock.clock(on)
   on('ui.blit', () => ({ value: { deny: 'the Image draws its alt here: the terminal draws neither kitty placeholder images' } }))
@@ -156,8 +160,7 @@ test('where the terminal draws only the alt, the pictures turn to blocks', async
   const ui = await $.ui.mount(toolRow('toolu_10', 'Read', { file_path: '/work/e.png' }))
   expect(await ui.find({ type: 'Image' })).toBeDefined()
   await clock.advance(1000)
-  expect(await ui.find({ type: 'Image' })).toBeUndefined()
-  expect(await ui.find({ type: 'Raster' })).toBeDefined()
+  expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
   await ui.unmount()
 })
 
@@ -175,18 +178,17 @@ test('where Claude Code does not recognise a terminal that draws pictures, one r
 
   const first = await $.ui.mount(toolRow('toolu_11', 'Read', { file_path: '/work/f.png' }))
   await clock.advance(1000)
-  expect(await first.find({ type: 'Raster' })).toBeDefined()
+  expect(await first.find({ type: 'Image' })).toBeUndefined()
   expect((await first.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1/ }))?.text).toBe(
     '看原图：用 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 启动 Claude Code',
   )
   const second = await $.ui.mount(toolRow('toolu_12', 'Read', { file_path: '/work/g.png' }))
-  expect(await second.find({ type: 'Raster' })).toBeDefined()
-  expect(await second.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES/ })).toBeUndefined()
+  expect(await second.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
   await first.unmount()
   await second.unmount()
 })
 
-test('a terminal that draws no pictures at all gets blocks and no hint', async ($, on) => {
+test('a terminal that draws no pictures at all gets no hint', async ($, on) => {
   engine(on)
   const clock = mock.clock(on)
   on('ui.blit', () => ({
@@ -199,7 +201,6 @@ test('a terminal that draws no pictures at all gets blocks and no hint', async (
 
   const ui = await $.ui.mount(toolRow('toolu_13', 'Read', { file_path: '/work/h.png' }))
   await clock.advance(1000)
-  expect(await ui.find({ type: 'Raster' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES/ })).toBeUndefined()
+  expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
   await ui.unmount()
 })
