@@ -25,6 +25,11 @@
       "name": "ambience",
       "source": "./ambience",
       "description": "Sounds for what Claude does (commands, edits, tests, commits, a finished turn), a notification after a long turn, and a live tally of the turn's work under the prompt"
+    },
+    {
+      "name": "peek",
+      "source": "./peek",
+      "description": "See the pictures Claude looks at: a thumbnail under each Read or screenshot in the conversation, large under ctrl+o. Real pictures where the terminal draws them, coloured blocks elsewhere"
     }
   ]
 }

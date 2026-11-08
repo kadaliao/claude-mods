@@ -1,0 +1,26 @@
+{
+  "name": "peek",
+  "version": "0.1.0",
+  "description": "See the pictures Claude looks at: under each Read or screenshot in the conversation, a thumbnail (large under ctrl+o). Real pictures where the terminal draws them, coloured blocks elsewhere",
+  "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
+  "homepage": "https://github.com/kadaliao/claude-mods/tree/main/peek",
+  "repository": "https://github.com/kadaliao/claude-mods",
+  "keywords": ["image", "picture", "screenshot", "preview", "mod"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "size": {
+      "type": "string",
+      "title": "Picture size in the conversation",
+      "description": "small: a thumbnail about 8 rows tall. large: up to 16 rows and the full width. ctrl+o always draws them large",
+      "default": "small",
+      "options": ["small", "large"]
+    },
+    "picture": {
+      "type": "string",
+      "title": "How pictures are drawn",
+      "description": "auto: the terminal's own pictures where it draws them (kitty, Ghostty, iTerm2 in fullscreen), coloured blocks elsewhere. image or blocks: always that",
+      "default": "auto",
+      "options": ["auto", "image", "blocks"]
+    }
+  }
+}
