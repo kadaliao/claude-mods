@@ -1,6 +1,6 @@
 {
   "name": "peek",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "See the pictures Claude looks at: under each Read or screenshot in the conversation, and under each prompt you paste a picture into, a small thumbnail (large under ctrl+o), drawn with the terminal's own pictures",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/peek",

@@ -309,3 +309,19 @@ test('a prompt with no picture is left as the engine draws it', async ($, on) =>
   expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
   await ui.unmount()
 })
+
+test('the model is told that pictures it reads are shown, in a terminal session only', async ($, on) => {
+  engine(on)
+  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'You are Claude Code.', scope: 'shared' }] }))
+  const compose = (surfaces: ('terminal' | 'desktop')[]) =>
+    $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces, tools: ['Read', 'Bash'], outputStyle: null, traits: [] })
+
+  const inTerminal = await compose(['terminal'])
+  const note = inTerminal.sections.find(s => s.id === 'peek:pictures')
+  expect(note?.scope).toBe('session')
+  expect(note?.text).toContain('To show the person a picture, Read it.')
+  expect(inTerminal.sections[0]?.id).toBe('intro')
+
+  const headless = await compose([])
+  expect(headless.sections.map(s => s.id)).toEqual(['intro'])
+})

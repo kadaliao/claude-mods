@@ -14,6 +14,10 @@ const GROUP_THUMBS = 12
 const INDENT = 5
 // Where a prompt's text starts in its row ("❯ ").
 const PROMPT_INDENT = 2
+// Told to the model, so it shows a picture by reading it, not by opening it in
+// another app: without it, "show me a picture" ends in Preview.
+const PICTURES_NOTE = `# Pictures in the terminal
+The person sees the pictures you look at: when you Read an image file, or a tool returns a screenshot, the picture is drawn under that row of the conversation in their terminal. To show the person a picture, Read it. Do not open pictures in another app (\`open\`, Preview, Finder, a browser) unless the person asks for that app, or says they cannot see the picture.`
 
 // A family: one member per tool call, by its tool_use_id.
 const shots = atom({ plugin: 'peek', key: 'shots' } as const, [])
@@ -227,6 +231,12 @@ async function under(
 
 export const register: Register = (on, options) => {
   const isLarge = options.size === 'large'
+
+  on('prompt.compose', async ($, e, next) => {
+    const composed = await next(e)
+    if (!e.surfaces.includes('terminal')) return composed
+    return { sections: [...composed.sections, { id: 'peek:pictures', text: PICTURES_NOTE, scope: 'session' as const }] }
+  })
 
   on('session.start', async ($, e, next) => {
     // Asks the terminal whether it draws pictures, once there is one to ask with.

@@ -85,6 +85,9 @@ Set it in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek`.
 - A mod has no image library, so peek carries its own decoders: PNG (with its own inflate) and
   JPEG (the decoder of [jpeg-js](https://github.com/jpeg-js/jpeg-js), from pdf.js). A picture
   larger than its box is shrunk before it goes to the terminal, once per size it is drawn at.
+- A short section of the system prompt (a few dozen tokens, terminal sessions only) tells Claude
+  that the pictures it reads are shown, so "show me a picture" is answered by reading it, not by
+  opening it in Preview.
 - Nothing leaves your machine and no model is called.
 
 ## Limits
