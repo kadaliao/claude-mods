@@ -5,7 +5,7 @@ English | [简体中文](README.zh-CN.md)
 See the pictures Claude looks at. When Claude reads an image file, or takes a screenshot (Claude
 in Chrome, the built-in browser, computer use, any MCP tool that returns a picture), the picture
 is drawn under that row of the conversation, so you see what Claude sees instead of a line that
-says `Read image (142KB)`.
+says `Read image (142KB)`. A picture you paste into a prompt is drawn under your prompt too.
 
 ```
 ⏺ Read(docs/screenshot.png)
@@ -35,9 +35,12 @@ There is nothing to type after that: the next picture Claude reads shows up unde
 ## Use
 
 - **One picture**: a thumbnail about 5 rows tall under the row that returned it.
+- **A pasted picture**: the same thumbnail, under your prompt.
 - **Several Reads folded into one line** ("Read 3 files"): their thumbnails side by side under
   that line, 4 rows each, up to 12.
 - **ctrl+o**: the expanded transcript draws every picture large, up to 30 rows and the full width.
+  With verbose on (Verbose output in `/config`) every row is already expanded and peek cannot tell
+  ctrl+o apart, so pictures keep the size the `size` option sets.
 
 ## Terminals
 
@@ -76,8 +79,9 @@ Set it in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek`.
 ## How it works
 
 - Each row of the conversation passes the mod before it is kept. Pictures in a tool's result are
-  filed under that tool call, and the row's drawing reads them from there. A resumed session reads
-  them back from the conversation.
+  filed under that tool call, pictures pasted into a prompt under that prompt, and the row's
+  drawing reads them from there. A resumed session reads them back from the conversation, and
+  finds a pasted picture's prompt by the `[Image #1]` in its text.
 - A mod has no image library, so peek carries its own decoders: PNG (with its own inflate) and
   JPEG (the decoder of [jpeg-js](https://github.com/jpeg-js/jpeg-js), from pdf.js). A picture
   larger than its box is shrunk before it goes to the terminal, once per size it is drawn at.

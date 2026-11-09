@@ -1,8 +1,8 @@
 import { atom, memberOf, read, update } from 'claude-code'
-import type { Elements, EngineInterface, ImageSource, Register, RenderNode } from 'claude-code'
+import type { Elements, EngineInterface, ImageSource, Register, RenderElement, RenderNode, RenderViewport } from 'claude-code'
 
 import type { Probe, Shot } from '../types'
-import { noteCalls, picturesOf } from './collect'
+import { noteCalls, pastedOf, picturesOf, promptKey } from './collect'
 import type { Found, ToolUse } from './collect'
 import { draw, fit, forget, forgetAll } from './picture'
 
@@ -12,10 +12,14 @@ const KEEP = 100
 const GROUP_THUMBS = 12
 // Where the transcript's result text starts under a tool row ("  ⎿  ").
 const INDENT = 5
+// Where a prompt's text starts in its row ("❯ ").
+const PROMPT_INDENT = 2
 
 // A family: one member per tool call, by its tool_use_id.
 const shots = atom({ plugin: 'peek', key: 'shots' } as const, [])
 const probeState = atom({ plugin: 'peek', key: 'probe' } as const, { canDraw: 'unknown' }, { shape: 'probe-1' })
+// The verbose setting: every row then says it is expanded, as under ctrl+o.
+const verboseState = atom({ plugin: 'peek', key: 'verbose' } as const, false)
 
 type Terminal = Elements['terminal']
 type Shown = Shot & { data?: string }
@@ -58,9 +62,14 @@ async function rebuild($: EngineInterface): Promise<void> {
   const found: Found[] = []
   for (const m of messages) {
     if (m.role === 'assistant') noteCalls(m.content, calls)
-    else found.push(...picturesOf(m.content, calls))
+    else found.push(...picturesOf(m.content, calls), ...pastedOf(m.content))
   }
   await add($, found.slice(-KEEP))
+}
+
+async function readVerbose($: EngineInterface): Promise<void> {
+  const row = (await $.config.list()).find(r => r.key === 'verbose')
+  await update($, verboseState, () => row?.value === true)
 }
 
 // What to tell the person when Claude Code drew a picture's alt in its place,
@@ -140,40 +149,84 @@ async function shownFor($: EngineInterface, callId: string | undefined, tool: st
   ]
 }
 
+// The pictures pasted into a prompt: filed under its row's id, or, on a
+// resumed session, under its text.
+async function pastedFor($: EngineInterface, requestId: string, text: string): Promise<Shown[]> {
+  for (const key of [requestId, promptKey(text)]) {
+    if (key === undefined) continue
+    const list = await read($, memberOf(shots, { requestId: key }))
+    if (list.length > 0) return list.map(s => ({ ...s, data: bytes.get(s.id) }))
+  }
+  return []
+}
+
+// The box each picture may take: one picture, or each of several side by side.
+function boxOf(room: number, count: number, isBig: boolean, isLarge: boolean): { maxCols: number; maxRows: number } {
+  if (isBig) return { maxCols: room, maxRows: 30 }
+  if (count > 1) return isLarge ? { maxCols: 28, maxRows: 6 } : { maxCols: 20, maxRows: 4 }
+  return isLarge ? { maxCols: room, maxRows: 16 } : { maxCols: Math.min(room, 36), maxRows: 5 }
+}
+
+// One picture in a box of at most `maxCols` × `maxRows` cells.
+function pictureOf(els: Terminal, requestId: string, s: Shown, p: Probe, maxCols: number, maxRows: number): RenderNode {
+  const { Text, Image } = els
+  if (s.data === undefined) return <Text dimColor>（这张图太早，已经不在内存里了）</Text>
+  const { columns, rows } = fit(s.width, s.height, maxCols, maxRows)
+  const d = draw(s.id, s.mime, s.data, columns, rows)
+  if (d.kind === 'none') return <Text dimColor>（{d.reason}）</Text>
+  const key = `img-${s.id}`
+  if (p.canDraw === 'unknown') lastShot = { requestId, key, source: d.source }
+  const size = s.width > 0 && s.height > 0 ? ` ${s.width}×${s.height}` : ''
+  return <Image key={key} source={d.source} columns={d.columns} rows={d.rows} alt={`[图片${s.label ? ` ${s.label}` : ''}${size}]`} />
+}
+
+// Under the one row the probe drew with, the first time on this terminal: how
+// to get the pictures drawn.
+function hintOf(els: Terminal, requestId: string, p: Probe, indent = INDENT): RenderNode | false {
+  if (p.canDraw !== 'no' || p.hintAt !== requestId || p.hint === undefined) return false
+  const { Box, Text } = els
+  return (
+    <Box paddingLeft={indent}>
+      <Text dimColor>{p.hint}</Text>
+    </Box>
+  )
+}
+
+// A row with its pictures under it, `indent` cells in. Large only under the
+// ctrl+o transcript: with verbose on every row says it is expanded, so the
+// pictures keep the size the person chose.
+async function under(
+  $: EngineInterface,
+  e: { requestId: string; viewport?: RenderViewport },
+  els: Terminal,
+  row: RenderElement,
+  shown: Shown[],
+  indent: number,
+  isExpanded: boolean | undefined,
+  isLarge: boolean,
+): Promise<RenderElement> {
+  const p = await read($, probeState)
+  const hint = hintOf(els, e.requestId, p, indent)
+  if (p.canDraw === 'no' && hint === false) return row
+  const isBig = isExpanded === true && !(await read($, verboseState))
+  const room = Math.max(20, (e.viewport?.columns ?? 80) - indent - 1)
+  const { maxCols, maxRows } = boxOf(room, shown.length, isBig, isLarge)
+  const { Box } = els
+  return (
+    <Box flexDirection="column">
+      {row}
+      {p.canDraw !== 'no' && (
+        <Box paddingLeft={indent} flexWrap="wrap" columnGap={1}>
+          {shown.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
+        </Box>
+      )}
+      {hint}
+    </Box>
+  )
+}
+
 export const register: Register = (on, options) => {
   const isLarge = options.size === 'large'
-
-  // The box each picture may take: one picture, or each of several side by side.
-  const boxOf = (room: number, count: number, isBig: boolean): { maxCols: number; maxRows: number } => {
-    if (isBig) return { maxCols: room, maxRows: 30 }
-    if (count > 1) return isLarge ? { maxCols: 28, maxRows: 6 } : { maxCols: 20, maxRows: 4 }
-    return isLarge ? { maxCols: room, maxRows: 16 } : { maxCols: Math.min(room, 36), maxRows: 5 }
-  }
-
-  // One picture in a box of at most `maxCols` × `maxRows` cells.
-  const pictureOf = (els: Terminal, requestId: string, s: Shown, p: Probe, maxCols: number, maxRows: number): RenderNode => {
-    const { Text, Image } = els
-    if (s.data === undefined) return <Text dimColor>（这张图太早，已经不在内存里了）</Text>
-    const { columns, rows } = fit(s.width, s.height, maxCols, maxRows)
-    const d = draw(s.id, s.mime, s.data, columns, rows)
-    if (d.kind === 'none') return <Text dimColor>（{d.reason}）</Text>
-    const key = `img-${s.id}`
-    if (p.canDraw === 'unknown') lastShot = { requestId, key, source: d.source }
-    const size = s.width > 0 && s.height > 0 ? ` ${s.width}×${s.height}` : ''
-    return <Image key={key} source={d.source} columns={d.columns} rows={d.rows} alt={`[图片${s.label ? ` ${s.label}` : ''}${size}]`} />
-  }
-
-  // Under the one row the probe drew with, the first time on this terminal: how
-  // to get the pictures drawn.
-  const hintOf = (els: Terminal, requestId: string, p: Probe): RenderNode | false => {
-    if (p.canDraw !== 'no' || p.hintAt !== requestId || p.hint === undefined) return false
-    const { Box, Text } = els
-    return (
-      <Box paddingLeft={INDENT}>
-        <Text dimColor>{p.hint}</Text>
-      </Box>
-    )
-  }
 
   on('session.start', async ($, e, next) => {
     // Asks the terminal whether it draws pictures, once there is one to ask with.
@@ -185,7 +238,14 @@ export const register: Register = (on, options) => {
         .catch(() => {})
     })
     $.clock.after(0, () => void rebuild($).catch(() => {}))
+    $.clock.after(0, () => void readVerbose($).catch(() => {}))
     return next(e)
+  })
+
+  on('config.set', { key: 'verbose' }, async ($, e, next) => {
+    const r = await next(e)
+    if (r.deny === undefined) await update($, verboseState, () => r.value === true).catch(() => {})
+    return r
   })
 
   on('session.end', async ($, e, next) => {
@@ -204,7 +264,7 @@ export const register: Register = (on, options) => {
       if (m.role === 'assistant') noteCalls(m.content, calls)
       else if (m.role === 'user' && e.door === 'tool-result') {
         await add($, picturesOf(m.content, calls, e.origin.kind === 'tool' ? e.origin.tool : undefined))
-      }
+      } else if (m.role === 'user') await add($, pastedOf(m.content, e.uuid))
     } catch {
       // A picture that cannot be read is left out; the row is kept regardless.
     }
@@ -217,25 +277,15 @@ export const register: Register = (on, options) => {
     if (e.surface !== 'terminal' || e.props.isRunning || e.props.isErrored) return next(e)
     const shown = await shownFor($, e.props.tool_use_id, e.props.tool, e.props.output)
     if (shown.length === 0) return next(e)
-    const p = await read($, probeState)
-    const els = $.ui.resolve(e)
-    const hint = hintOf(els, e.requestId, p)
-    if (p.canDraw === 'no' && hint === false) return next(e)
-    const { Box } = els
-    const room = Math.max(20, (e.viewport?.columns ?? 80) - INDENT - 1)
-    const { maxCols, maxRows } = boxOf(room, shown.length, e.props.isExpanded === true)
-    const row = await next(e)
-    return (
-      <Box flexDirection="column">
-        {row}
-        {p.canDraw !== 'no' && (
-          <Box paddingLeft={INDENT} flexWrap="wrap" columnGap={1}>
-            {shown.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
-          </Box>
-        )}
-        {hint}
-      </Box>
-    )
+    return under($, e, $.ui.resolve(e), await next(e), shown, INDENT, e.props.isExpanded, isLarge)
+  })
+
+  // The pictures pasted into a prompt, under its row.
+  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
+    if (e.surface !== 'terminal') return next(e)
+    const shown = await pastedFor($, e.requestId, e.props.text)
+    if (shown.length === 0) return next(e)
+    return under($, e, $.ui.resolve(e), await next(e), shown, PROMPT_INDENT, e.props.isExpanded, isLarge)
   })
 
   // Thumbnails under a folded "Read N files" line, for the calls that read pictures.
@@ -253,7 +303,7 @@ export const register: Register = (on, options) => {
     if (p.canDraw === 'no' && hint === false) return next(e)
     const { Box, Text } = els
     const room = Math.max(20, (e.viewport?.columns ?? 80) - INDENT - 1)
-    const { maxCols, maxRows } = boxOf(room, shown.length, false)
+    const { maxCols, maxRows } = boxOf(room, shown.length, false, isLarge)
     const thumbs = shown.slice(-GROUP_THUMBS)
     const row = await next(e)
     return (

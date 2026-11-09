@@ -10,7 +10,7 @@
 | [prompt-en](prompt-en/) | 每条 prompt 下方一行英文：其他语言给译文，英文给纠错或别的说法；长 prompt 给精简版，粘贴的代码折叠成标签；附带生词本（`/vocab`），复习它教过的说法。也可以换成日语<br><img src="docs/prompt-en/thumb.png" width="684" alt="prompt-en：中文 prompt 下方的英文译文"> |
 | [danmaku](danmaku/) | Claude 干活时输入框上方几条轨道飘 B 站风格弹幕，实时吐槽它在干什么：`rm -rf`、测试挂了这类事马上有反应，其余由小模型每隔几秒写几句<br><img src="docs/danmaku/danmaku-lanes.gif" width="600" alt="danmaku：Claude 干活时输入框上方飞过的弹幕"> |
 | [ambience](ambience/) | 给 Claude 的动作配音效（跑命令咔哒、改文件啵、测试通过放号角、失败放悲伤长号、一轮结束响铃），长任务结束发系统通知，输入框下方实时显示本轮战报<br><img src="docs/ambience/ambience-tally.png" width="600" alt="ambience：输入框下方的本轮战报"> |
-| [peek](peek/) | 把 Claude 看过的图画在对话里：每次 Read 或截图（Claude in Chrome、computer use、任何 MCP 工具）下面一张缩略图，ctrl+o 看大图，用终端自己的图片功能画 |
+| [peek](peek/) | 把 Claude 看过的图画在对话里：每次 Read 或截图（Claude in Chrome、computer use、任何 MCP 工具）和每张粘贴的图下面一张缩略图，ctrl+o 看大图，用终端自己的图片功能画 |
 
 安装某个 mod，在 Claude Code 终端会话的输入框里输入：
 

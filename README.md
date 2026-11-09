@@ -13,7 +13,7 @@ mod installs separately.
 | [prompt-en](prompt-en/) | English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English; long prompts condensed, pasted code folded; a vocabulary book (`/vocab`) to review what it taught. Or all of it in Japanese<br><img src="docs/prompt-en/thumb.png" width="684" alt="prompt-en: a Chinese prompt and its English underneath"> |
 | [danmaku](danmaku/) | Bilibili-style bullet comments (danmaku) flying in a few lanes above the prompt while Claude works, heckling what it does: instant reactions to a `rm -rf` or a failing test, and quips a small model writes every few seconds<br><img src="docs/danmaku/danmaku-lanes.gif" width="600" alt="danmaku: comments flying above the prompt while Claude works"> |
 | [ambience](ambience/) | Sounds for what Claude does (a command's click, an edit's pop, a fanfare when tests pass, a sad trombone when they fail, a chime when the turn ends), a notification after a long turn, and a live tally of the turn's work under the prompt<br><img src="docs/ambience/ambience-tally.png" width="600" alt="ambience: the turn's tally under the prompt"> |
-| [peek](peek/) | The pictures Claude looks at, drawn in the conversation: a thumbnail under each Read or screenshot (Claude in Chrome, computer use, any MCP tool), large under ctrl+o, drawn with the terminal's own pictures |
+| [peek](peek/) | The pictures Claude looks at, drawn in the conversation: a thumbnail under each Read or screenshot (Claude in Chrome, computer use, any MCP tool) and under each pasted picture, large under ctrl+o, drawn with the terminal's own pictures |
 
 To install one, type this at the prompt of a Claude Code terminal session:
 

@@ -1,4 +1,4 @@
-// One picture a tool call returned, as its row draws it. Its bytes stay in the
+// One picture a tool call returned or the person pasted, as its row draws it. Its bytes stay in the
 // module, not in state: a reload reads them back from the conversation.
 export type Shot = {
   // A hash of the picture's bytes.
@@ -17,9 +17,12 @@ export type Probe = { canDraw: 'unknown' | 'yes' | 'no'; hintAt?: string; hint?:
 declare module 'claude-code' {
   interface PluginState {
     peek: {
-      // The pictures each tool call returned, by its tool_use_id.
+      // The pictures each tool call returned, by its tool_use_id, and the
+      // pictures pasted into each prompt, by its row's id and by its text.
       shots: StateFamily<Shot[]>
       probe: Shaped<Probe>
+      // Whether the verbose setting is on.
+      verbose: boolean
     }
   }
 }

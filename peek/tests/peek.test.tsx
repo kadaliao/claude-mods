@@ -209,3 +209,103 @@ test('hints by terminal', () => {
   expect(hintFor('the Image draws its alt here: the terminal draws neither kitty placeholder images (env: terminal=unknown, not asked yet) nor iTerm2 inline images (x)')?.terminal).toBe('这个终端')
   expect(hintFor('the Image draws its alt here: every 8-bit image id is in use')).toBeUndefined()
 })
+
+// A Read's own result, saying the picture is 1600×800.
+const WIDE_OUTPUT = { type: 'image', file: { base64: PNG, type: 'image/png', originalSize: 226, dimensions: { displayWidth: 1600, displayHeight: 800 } } }
+
+// The engine's settings, with verbose on or off.
+function settings(on: On, verbose: boolean): void {
+  const row = { key: 'verbose', label: 'Verbose output', kind: 'boolean', value: verbose, provider: { plugin: 'engine', tier: 'core' }, isLocked: false }
+  on('config.list', () => ({ value: [row] as never }))
+  on('config.set', (_, e) => ({ value: e.value }))
+}
+
+test('with verbose on, every row says it is expanded and the pictures keep their size', async ($, on) => {
+  engine(on)
+  settings(on, true)
+  const clock = mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.advance(0)
+
+  const ui = await $.ui.mount(toolRow('toolu_30', 'Read', { file_path: '/work/wide.png' }, { output: WIDE_OUTPUT, isExpanded: true }))
+  expect((await ui.find({ type: 'Image' }))?.props).toMatchObject({ columns: 20, rows: 5 })
+  await ui.unmount()
+})
+
+test('turning verbose on in /config takes the large pictures back to their size', async ($, on) => {
+  engine(on)
+  settings(on, false)
+  const clock = mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.advance(0)
+  const row = toolRow('toolu_31', 'Read', { file_path: '/work/wide.png' }, { output: WIDE_OUTPUT, isExpanded: true })
+
+  const before = await $.ui.mount(row)
+  expect((await before.find({ type: 'Image' }))?.props).toMatchObject({ columns: 94, rows: 24 })
+  await before.unmount()
+  await $.config.set({ key: 'verbose', value: true, previous: false, provider: { plugin: 'engine', tier: 'core' }, origin: { kind: 'composer' } })
+  const after = await $.ui.mount(row)
+  expect((await after.find({ type: 'Image' }))?.props).toMatchObject({ columns: 20, rows: 5 })
+  await after.unmount()
+})
+
+const promptRow = (id: string, text: string) =>
+  ({
+    plugin: 'peek',
+    surface: 'terminal',
+    component: 'UserMessage',
+    requestId: id,
+    viewport: VIEWPORT,
+    props: { text, origin: { kind: 'composer' }, isExpanded: false },
+  }) as const
+const pastedBlocks = (text: string, data: string, mime: string) => [
+  { type: 'text', text },
+  { type: 'image', source: { type: 'base64', media_type: mime, data } },
+]
+
+test('a picture pasted into a prompt shows under the prompt', async ($, on) => {
+  engine(on)
+  await $.session.append({
+    door: 'prompt',
+    origin: { kind: 'composer' },
+    uuid: 'row-1',
+    message: { type: 'user', role: 'user', content: pastedBlocks('[Image #1] 看看这张', PNG, 'image/png') } as never,
+  })
+
+  const ui = await $.ui.mount(promptRow('row-1', '[Image #1] 看看这张'))
+  expect((await ui.find({ type: 'Text', text: 'row' }))?.text).toBe('row')
+  const image = await ui.find({ type: 'Image' })
+  expect(image?.props.alt).toBe('[图片 粘贴的图 16×8]')
+  expect(image?.props.source).toEqual({ png: PNG })
+  await ui.unmount()
+})
+
+test('a resumed session finds a pasted picture by its prompt', async ($, on) => {
+  // As the conversation reads back: reminders before the prompt, the picture's source after it.
+  const content = [
+    { type: 'text', text: '<system-reminder>\nnotes\n</system-reminder>' },
+    ...pastedBlocks('[Image #1] 看看这张', JPEG, 'image/jpeg'),
+    { type: 'text', text: '[Image: source: /tmp/shot.jpg]' },
+  ]
+  engine(on, [{ role: 'user', content }])
+  const clock = mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.advance(0)
+
+  const ui = await $.ui.mount(promptRow('row-unknown', '[Image #1] 看看这张'))
+  expect((await ui.find({ type: 'Image' }))?.props.alt).toBe('[图片 粘贴的图 16×8]')
+  await ui.unmount()
+})
+
+test('a prompt with no picture is left as the engine draws it', async ($, on) => {
+  engine(on)
+  await $.session.append({
+    door: 'prompt',
+    origin: { kind: 'composer' },
+    uuid: 'row-2',
+    message: { type: 'user', role: 'user', content: [{ type: 'text', text: '看看这张' }] } as never,
+  })
+  const ui = await $.ui.mount(promptRow('row-2', '看看这张'))
+  expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['row'] })
+  await ui.unmount()
+})

@@ -1,5 +1,6 @@
-// Finds the pictures tools returned to Claude (Read, browser and screen
-// screenshots, any MCP tool) in a conversation's rows.
+// Finds the pictures in a conversation's rows: what tools returned to Claude
+// (Read, browser and screen screenshots, any MCP tool), and what the person
+// pasted into a prompt.
 
 import type { Shot } from '../types'
 
@@ -7,7 +8,8 @@ import { base64ToBytes, sizeOf } from './picture'
 
 type Block = { type: string; [field: string]: unknown }
 export type ToolUse = { name: string; input: unknown }
-// A picture found, with its bytes and the call that returned it.
+// A picture found, with its bytes and the row it is filed under: the tool call
+// that returned it, or the prompt it was pasted into.
 export type Found = { shot: Shot; data: string; callId: string }
 
 // FNV-1a over the whole base64 text and its length: the same bytes, the same id.
@@ -55,6 +57,17 @@ export function noteCalls(content: readonly unknown[], calls: Map<string, ToolUs
   }
 }
 
+function shotOf(image: { mime: string; data: string }, label: string): Shot {
+  let size: { width: number; height: number } | undefined
+  try {
+    // The header is near the start; a JPEG with a large EXIF block needs it all.
+    size = sizeOf(image.mime, base64ToBytes(image.data.slice(0, 64 * 1024))) ?? sizeOf(image.mime, base64ToBytes(image.data))
+  } catch {
+    size = undefined
+  }
+  return { id: hashOf(image.data), mime: image.mime, width: size?.width ?? 0, height: size?.height ?? 0, label }
+}
+
 // The pictures in the tool results of one user-side row.
 export function picturesOf(content: readonly unknown[], calls: Map<string, ToolUse>, tool?: string): Found[] {
   const out: Found[] = []
@@ -64,19 +77,30 @@ export function picturesOf(content: readonly unknown[], calls: Map<string, ToolU
     const label = labelOf(call?.name ?? tool ?? '工具', call?.input)
     for (const image of (b.content as Block[]).map(imageOf)) {
       if (image === undefined) continue
-      let size: { width: number; height: number } | undefined
-      try {
-        // The header is near the start; a JPEG with a large EXIF block needs it all.
-        size = sizeOf(image.mime, base64ToBytes(image.data.slice(0, 64 * 1024))) ?? sizeOf(image.mime, base64ToBytes(image.data))
-      } catch {
-        size = undefined
-      }
-      out.push({
-        shot: { id: hashOf(image.data), mime: image.mime, width: size?.width ?? 0, height: size?.height ?? 0, label },
-        data: image.data,
-        callId: b.tool_use_id,
-      })
+      out.push({ shot: shotOf(image, label), data: image.data, callId: b.tool_use_id })
     }
   }
   return out
+}
+
+// What a pasted picture is also filed under: the words of the prompt it came
+// with, which hold its "[Image #1]". A resumed session knows no row ids, so the
+// prompt's row finds its pictures again by its text.
+export function promptKey(text: string): string | undefined {
+  const t = text.trim()
+  return /\[Image #\d+\]/.test(t) ? `prompt-${hashOf(t)}` : undefined
+}
+
+// The pictures pasted into one prompt row, filed under the row's id (`uuid`,
+// when known) and under its text.
+export function pastedOf(content: readonly unknown[], uuid?: string): Found[] {
+  const images = (content as Block[]).map(imageOf).filter(i => i !== undefined)
+  if (images.length === 0) return []
+  const keys = new Set<string>(uuid === undefined ? [] : [uuid])
+  for (const b of content as Block[]) {
+    const key = b?.type === 'text' && typeof b.text === 'string' ? promptKey(b.text) : undefined
+    if (key !== undefined) keys.add(key)
+  }
+  const shots = images.map(image => ({ shot: shotOf(image, '粘贴的图'), data: image.data }))
+  return [...keys].flatMap(callId => shots.map(s => ({ ...s, callId })))
 }

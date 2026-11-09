@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-看到 Claude 看到的图。Claude 读图片文件、截图（Claude in Chrome、内置浏览器、computer use，以及任何返回图片的 MCP 工具）时，图直接画在对话里那一行下面，不再只是一行 `Read image (142KB)`。
+看到 Claude 看到的图。Claude 读图片文件、截图（Claude in Chrome、内置浏览器、computer use，以及任何返回图片的 MCP 工具）时，图直接画在对话里那一行下面，不再只是一行 `Read image (142KB)`。你粘贴进消息的图也一样，画在你那条消息下面。
 
 ```
 ⏺ Read(docs/screenshot.png)
@@ -32,8 +32,9 @@ claude plugin install peek@kadaliao
 ## 用法
 
 - **一张图**：在返回它的那一行下面画一张缩略图，大约 5 行高。
+- **粘贴的图**：画在你那条消息下面，大小和上面一样。
 - **几次 Read 折叠成一行**（"Read 3 files"）：缩略图并排画在这一行下面，每张 4 行高，最多 12 张。
-- **ctrl+o**：展开的对话里每张图都画成大图，最高 30 行，占满宽度。
+- **ctrl+o**：展开的对话里每张图都画成大图，最高 30 行，占满宽度。开着 verbose（`/config` 里的 Verbose output）时，每一行本来就是展开的，peek 分不出 ctrl+o，图一律按 `size` 选项的大小画。
 
 ## 终端
 
@@ -61,7 +62,7 @@ claude plugin install peek@kadaliao
 
 ## 原理
 
-- 对话的每一行在保存前都会经过 mod。工具结果里的图记在那次工具调用下，画那一行时从这里取。恢复会话时从对话记录里重新读出来。
+- 对话的每一行在保存前都会经过 mod。工具结果里的图记在那次工具调用下，粘贴的图记在那条消息下，画那一行时从这里取。恢复会话时从对话记录里重新读出来；粘贴的图靠消息里的 `[Image #1]` 文字找回对应的那一行。
 - mod 没有图片库，所以 peek 自带解码器：PNG（自带解压）和 JPEG（[jpeg-js](https://github.com/jpeg-js/jpeg-js) 的解码器，源自 pdf.js）。比显示框大的图先缩小再交给终端，同一张图同一尺寸只处理一次。
 - 不发送任何数据，也不调用模型。
 
