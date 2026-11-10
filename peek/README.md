@@ -38,9 +38,31 @@ There is nothing to type after that: the next picture Claude reads shows up unde
 - **A pasted picture**: the same thumbnail, under your prompt.
 - **Several Reads folded into one line** ("Read 3 files"): their thumbnails side by side under
   that line, 4 rows each, up to 12.
+- **`/peek`**: a pane above the prompt (beside the transcript in fullscreen) shows the session's
+  pictures one at a time, as large as the pane, newest first. `p` and `n` turn to the previous and
+  next, Esc closes it, and so does `/peek` again. It works mid-turn, with verbose on, and for
+  pictures already printed.
 - **ctrl+o**: the expanded transcript draws every picture large, up to 30 rows and the full width.
   With verbose on (Verbose output in `/config`) every row is already expanded and peek cannot tell
-  ctrl+o apart, so pictures keep the size the `size` option sets.
+  ctrl+o apart, so pictures keep the size the `size` option sets; `/peek` still shows them large.
+
+### A key for `/peek`
+
+A mod cannot bind a key itself, but Claude Code can bind one to a slash command. In
+`~/.claude/keybindings.json` (merge it in if the file exists):
+
+```json
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    { "context": "Chat", "bindings": { "ctrl+x p": "command:peek" } }
+  ]
+}
+```
+
+ctrl+x then p opens the pane from the prompt and, while the prompt has the keys, closes it. No
+default binding uses it. While the pane has the keys, Esc closes it.
 
 ## Terminals
 
@@ -98,7 +120,7 @@ Set it in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek`.
   that draws no pictures, the first picture can stay as a `[图片 …]` line, as the check takes a
   second.
 - Drawn on the terminal only. Mods (function hooks) are an early-access API of Claude Code and may
-  change between releases. Built and tested on Claude Code 2.1.319.
+  change between releases. Built and tested on Claude Code 2.1.322.
 
 ## Development
 

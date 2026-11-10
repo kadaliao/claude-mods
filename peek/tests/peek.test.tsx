@@ -8,15 +8,46 @@ import { JPEG, PNG, WIDE_PNG } from './fixtures'
 const VIEWPORT = { columns: 100, rows: 40, isFullscreen: false }
 
 // Stands for the engine beneath the mod: rows draw as "row"; the conversation
-// holds `messages` when the mod reads it back.
-function engine(on: On, messages: unknown[] = []): void {
+// holds `messages` when the mod reads it back. Returns the panes it holds open,
+// and what the commands the mod registered asked for.
+function engine(on: On, messages: unknown[] = []) {
+  const panes = new Map<string, { rows?: number; columns?: number; focus?: boolean }>()
+  const immediate: Record<string, boolean> = {}
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>row</Text>
   })
   on('session.messages', () => ({ value: messages as never }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => {
+    immediate[e.name] = e.immediate === true
+    return { value: { command: e.name } }
+  })
+  on('ui.open', (_, e) => {
+    panes.set(e.id, { rows: e.rows, columns: e.columns, focus: e.focus })
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', (_, e) => {
+    panes.delete(e.id)
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({
+    value: [...panes.keys()].map(id => ({ id, title: id, isShown: true, isPlaced: true, isFocused: true })),
+  }))
+  return { panes, immediate }
 }
+
+const peek = ($: Engine) =>
+  $.command.run({ command: 'peek', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+
+const PANE = {
+  plugin: 'peek',
+  surface: 'terminal',
+  component: 'Pane',
+  requestId: 'peek',
+  viewport: VIEWPORT,
+  props: { title: '图片', isFocused: true, bodyColumns: 96, placement: 'inline', scroll: { offset: 0, bodyRows: 32 }, view: {} },
+} as const
 
 const callRow = (id: string, tool: string, input: unknown) => ({
   role: 'assistant',
@@ -324,4 +355,81 @@ test('the model is told that pictures it reads are shown, in a terminal session 
 
   const headless = await compose([])
   expect(headless.sections.map(s => s.id)).toEqual(['intro'])
+})
+
+// --- /peek: the session's pictures large, in a pane ---------------------------
+
+const caption = async (ui: { find: (q: object) => Promise<{ text?: string } | undefined> }) =>
+  (await ui.find({ type: 'Text', text: /^\d+\/\d+/ }))?.text
+
+test('/peek opens a pane on the newest picture, drawn as large as the pane', async ($, on) => {
+  const e = engine(on)
+  mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(e.immediate.peek).toBe(true)
+  await returns($, 'toolu_20', 'Read', { file_path: '/work/wide.png' }, WIDE_PNG, 'image/png')
+  await returns($, 'toolu_21', 'mcp__claude-in-chrome__computer', { action: 'screenshot' }, JPEG, 'image/jpeg')
+
+  const ran = await peek($)
+  expect(ran.text).toBeUndefined()
+  expect(e.panes.get('peek')).toMatchObject({ rows: 32, columns: 45, focus: true })
+
+  const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 96 } })
+  expect(await caption(ui)).toBe('2/2 · Chrome 截图 · 16×8')
+  await ui.unmount()
+
+  // The wide one fills the pane's width, past any thumbnail's.
+  await returns($, 'toolu_22', 'Read', { file_path: '/work/wide2.png' }, WIDE_PNG, 'image/png')
+  const wide = await $.ui.mount(PANE)
+  expect(await caption(wide)).toBe('2/2 · wide2.png · 600×300')
+  expect((await wide.find({ type: 'Image' }))?.props).toMatchObject({ columns: 75, rows: 19 })
+  await wide.unmount()
+})
+
+test('in the pane, p and n turn through the pictures, round from either end', async ($, on) => {
+  engine(on)
+  mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await returns($, 'toolu_23', 'Read', { file_path: '/work/a.png' }, PNG, 'image/png')
+  await returns($, 'toolu_24', 'mcp__claude-in-chrome__computer', { action: 'screenshot' }, JPEG, 'image/jpeg')
+  await peek($)
+
+  const ui = await $.ui.mount(PANE)
+  expect(await caption(ui)).toBe('2/2 · Chrome 截图 · 16×8')
+  await ui.press({ key: 'prev' })
+  expect(await caption(ui)).toBe('1/2 · a.png · 16×8')
+  await ui.press({ key: 'prev' })
+  expect(await caption(ui)).toBe('2/2 · Chrome 截图 · 16×8')
+  await ui.press({ key: 'next' })
+  expect(await caption(ui)).toBe('1/2 · a.png · 16×8')
+  await ui.unmount()
+})
+
+test('/peek again closes the pane, and opens it on the newest next time', async ($, on) => {
+  const e = engine(on)
+  mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await returns($, 'toolu_25', 'Read', { file_path: '/work/a.png' }, PNG, 'image/png')
+  await returns($, 'toolu_26', 'Read', { file_path: '/work/b.png' }, WIDE_PNG, 'image/png')
+  await peek($)
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'prev' })
+  expect(await caption(ui)).toBe('1/2 · a.png · 16×8')
+  await ui.unmount()
+
+  expect((await peek($)).text).toBeUndefined()
+  expect(e.panes.has('peek')).toBe(false)
+
+  await peek($)
+  const again = await $.ui.mount(PANE)
+  expect(await caption(again)).toBe('2/2 · b.png · 600×300')
+  await again.unmount()
+})
+
+test('/peek with no pictures yet says so and opens nothing', async ($, on) => {
+  const e = engine(on)
+  mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect((await peek($)).text).toBe('这个会话里还没有图。')
+  expect(e.panes.size).toBe(0)
 })

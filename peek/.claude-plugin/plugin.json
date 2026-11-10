@@ -1,7 +1,7 @@
 {
   "name": "peek",
-  "version": "0.3.1",
-  "description": "See the pictures Claude looks at: under each Read or screenshot in the conversation, and under each prompt you paste a picture into, a small thumbnail (large under ctrl+o), drawn with the terminal's own pictures",
+  "version": "0.4.0",
+  "description": "See the pictures Claude looks at: under each Read or screenshot in the conversation, and under each prompt you paste a picture into, a small thumbnail (large under ctrl+o), and /peek to see them large one at a time, drawn with the terminal's own pictures",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/peek",
   "repository": "https://github.com/kadaliao/claude-mods",
@@ -11,7 +11,7 @@
     "size": {
       "type": "string",
       "title": "Picture size in the conversation",
-      "description": "small: a thumbnail about 5 rows tall. large: up to 16 rows and the full width. ctrl+o always draws them large",
+      "description": "small: a thumbnail about 5 rows tall. large: up to 16 rows and the full width. ctrl+o and /peek always draw them large",
       "default": "small",
       "options": ["small", "large"]
     }

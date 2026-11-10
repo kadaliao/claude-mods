@@ -34,7 +34,24 @@ claude plugin install peek@kadaliao
 - **一张图**：在返回它的那一行下面画一张缩略图，大约 5 行高。
 - **粘贴的图**：画在你那条消息下面，大小和上面一样。
 - **几次 Read 折叠成一行**（"Read 3 files"）：缩略图并排画在这一行下面，每张 4 行高，最多 12 张。
-- **ctrl+o**：展开的对话里每张图都画成大图，最高 30 行，占满宽度。开着 verbose（`/config` 里的 Verbose output）时，每一行本来就是展开的，peek 分不出 ctrl+o，图一律按 `size` 选项的大小画。
+- **`/peek`**：在输入框上方（全屏模式下在对话旁边）开一个面板，把这个会话里的图一张一张画大，占满面板，最新的一张先出来。`p`、`n` 翻到上一张、下一张，Esc 关闭，再输一次 `/peek` 也关闭。Claude 干活时、开着 verbose 时、图早已打印出去时都能用。
+- **ctrl+o**：展开的对话里每张图都画成大图，最高 30 行，占满宽度。开着 verbose（`/config` 里的 Verbose output）时，每一行本来就是展开的，peek 分不出 ctrl+o，图一律按 `size` 选项的大小画；这时用 `/peek` 看大图。
+
+### 给 `/peek` 绑一个键
+
+mod 自己绑不了键，但 Claude Code 能把键绑到斜杠命令上。写进 `~/.claude/keybindings.json`（文件已存在就合并进去）：
+
+```json
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    { "context": "Chat", "bindings": { "ctrl+x p": "command:peek" } }
+  ]
+}
+```
+
+先按 ctrl+x 再按 p，在输入框里打开面板；输入框拿着键盘时再按一次就关闭。Claude Code 默认没有用这个组合。面板拿着键盘时按 Esc 关闭。
 
 ## 终端
 
@@ -72,7 +89,7 @@ claude plugin install peek@kadaliao
 - WebP 和 GIF 不画，原地显示一行说明。
 - 每个会话保留最近 100 张图的数据，更早的那一行会说明已经释放。
 - 非全屏模式下，已经打印到终端的行不会再变。在画不了图片的终端里，第一张图可能停留在一行 `[图片 …]` 文字，因为判断要一秒。
-- 只在终端里画。mod（function hooks）是 Claude Code 的早期接口，版本之间可能变化。在 Claude Code 2.1.319 上开发和测试。
+- 只在终端里画。mod（function hooks）是 Claude Code 的早期接口，版本之间可能变化。在 Claude Code 2.1.322 上开发和测试。
 
 ## 开发
 
