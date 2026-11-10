@@ -2,6 +2,10 @@
 export type Comment = {
   id: number
   text: string
+  // Who says it, drawn dim before the text: a philosopher heckling.
+  from?: string
+  // Who said it, drawn dim after the text: a philosopher's line.
+  by?: string
   color?: string
   // Sent by the person with /danmaku <text>.
   isMine?: boolean

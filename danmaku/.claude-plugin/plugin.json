@@ -1,13 +1,27 @@
 {
   "name": "danmaku",
-  "version": "0.2.2",
-  "description": "Bilibili-style bullet comments that fly across a few lanes above the prompt, heckling what Claude does as it works",
+  "version": "0.3.0",
+  "description": "Bilibili-style bullet comments that fly across a few lanes above the prompt as Claude works: heckles about what it does, philosophers' lines that fit the moment, or philosophers heckling it, in Chinese, English or both",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/danmaku",
   "repository": "https://github.com/kadaliao/claude-mods",
-  "keywords": ["danmaku", "bilibili", "band", "fun", "mod"],
+  "keywords": ["danmaku", "bilibili", "philosophy", "quotes", "band", "fun", "mod"],
   "types": "./types/index.d.ts",
   "userConfig": {
+    "style": {
+      "type": "string",
+      "title": "Comment style",
+      "description": "heckle: Bilibili-style heckles about what Claude does. philosophy: a line from a philosopher that fits the moment, with who said it and their school. philosopher-heckle: philosophers of many schools heckling what Claude does, each from their own point of view",
+      "default": "heckle",
+      "options": ["heckle", "philosophy", "philosopher-heckle"]
+    },
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "chinese, english, or bilingual: each comment in Chinese with the English after it",
+      "default": "chinese",
+      "options": ["chinese", "english", "bilingual"]
+    },
     "model": {
       "type": "string",
       "title": "Comment model",

@@ -2,7 +2,10 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import type { Band } from '../types'
-import { addComments, buildPrompt, describe, parseDanmaku, reactionTo } from '../hooks/register'
+import type { Moment } from '../hooks/lines'
+import { HECKLES, JIBES, SAYINGS } from '../hooks/lines'
+import type { Happening, Reaction } from '../hooks/register'
+import { addComments, buildPrompt, describe, parseDanmaku, parseSayings, reactionTo, someSchools } from '../hooks/register'
 import type { Flying, Lanes } from '../hooks/screen'
 import { cellsOf, charCells, emptyLanes, freeLane, layoutLane, place, step } from '../hooks/screen'
 
@@ -10,6 +13,12 @@ const SURFACES = ['terminal', 'desktop'] as const
 const PRESENTATION = { isFullscreen: true, columns: 160 } as const
 const NB = '\u00a0'
 const HECKLE = /前方高能|危险操作|手别抖|高能预警/
+// Who said the lines the table has for a dangerous command.
+const DANGER_BY = /老子|慧能|佛陀|伊壁鸠鲁|孟子|塞涅卡/
+// By someone no table names, so a reaction from the table cannot be taken for it.
+const PYRRHO =
+  '{"zh":"测试真的跑过吗？我存疑","en":"Did the tests really run? I suspend judgment.","who":"皮浪","whoEn":"Pyrrho","school":"怀疑论","schoolEn":"Skepticism"}'
+const CAMUS = '{"zh":"应当想象西西弗斯是幸福的","en":"One must imagine Sisyphus happy.","who":"加缪","whoEn":"Camus","school":"荒诞主义","schoolEn":"Absurdism"}'
 
 const BAND = {
   plugin: 'danmaku',
@@ -25,6 +34,8 @@ const BAND = {
   viewport: { columns: 65, rows: 40 },
 } as const
 const IDLE = { ...BAND, props: { ...BAND.props, isWorking: false } }
+// Wide enough for a whole line and who said it to show at once.
+const WIDE = { ...BAND, props: { ...BAND.props, bodyColumns: 120 }, viewport: { columns: 125, rows: 40 } }
 
 const fly = (over: Partial<Flying>): Flying => ({ id: 1, text: 'ab', width: 2, lane: 0, x: 0, speed: 1, ...over })
 const text = (runs: Array<{ text: string }>) => runs.map(r => r.text).join('')
@@ -35,11 +46,13 @@ function world(on: On, reply = '前排\n这波操作', stored: Record<string, un
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.store(on, stored)
   const prompts: string[] = []
+  const systems: string[] = []
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: 'danmaku' } }))
   on('ui.close', () => ({ value: undefined }))
   on('model.complete', (_, e) => {
     prompts.push(e.prompt)
+    systems.push(String(e.system))
     return {
       value: {
         isAnswered: true,
@@ -55,7 +68,7 @@ function world(on: On, reply = '前排\n这波操作', stored: Record<string, un
     const { Text } = $.ui.resolve(e)
     return <Text>status</Text>
   })
-  return { clock, prompts }
+  return { clock, prompts, systems }
 }
 
 const run = (args: string) => ({ command: 'danmaku', args, origin: { kind: 'composer' }, presentation: PRESENTATION }) as const
@@ -78,6 +91,18 @@ test('lays out a lane, cut at both edges', () => {
   expect(layoutLane([fly({ text: '中', width: 2, x: 5 })], 6)).toEqual([])
   const colored = layoutLane([fly({ x: 0, color: 'success' }), fly({ id: 2, text: 'cd', x: 3 })], 6)
   expect(colored).toEqual([{ text: 'ab', color: 'success' }, { text: `${NB}cd` }])
+  // Who said it follows, dim.
+  const quoted = layoutLane([fly({ x: 1, color: 'claude', by: ' 老子', width: 7 })], 10)
+  expect(quoted).toEqual([{ text: NB }, { text: 'ab', color: 'claude' }, { text: ' 老子', isDim: true }])
+  // Who says it goes before, dim.
+  const jibe = layoutLane([fly({ x: 0, from: '老子：', width: 8 })], 10)
+  expect(jibe).toEqual([{ text: '老子：', isDim: true }, { text: 'ab' }])
+})
+
+test("a comment's width takes who said it, and a slower crossing moves it slower", () => {
+  const s = place(emptyLanes, [{ id: 1, text: 'ab', by: 'cd' }], { cols: 20, lanes: 1, crossMs: 18_000 })
+  expect(s.items[0]?.width).toBe(4)
+  expect(s.items[0]?.speed).toBe(24 / 180)
 })
 
 test('a comment wider than the lane shows every letter on its way across', () => {
@@ -129,11 +154,83 @@ test('reads the comments out of a reply', () => {
   expect(parseDanmaku('长'.repeat(40))).toEqual(['长'.repeat(40)])
 })
 
+const bash = (command: string, isError = false): Happening => ({ kind: 'tool', tool: 'Bash', command, isError })
+const texts = (r: Reaction | undefined) => r?.comments.map(c => c.text) ?? []
+
 test('reacts at once to what matters', () => {
-  expect(reactionTo({ kind: 'tool', tool: 'Bash', command: 'rm -rf build', isError: false })?.chance).toBe(1)
-  expect(reactionTo({ kind: 'tool', tool: 'Bash', command: 'npm test', isError: true })?.texts).toContain('红了红了')
-  expect(reactionTo({ kind: 'tool', tool: 'Bash', command: 'git push', isError: false })?.texts).toContain('推了推了')
+  expect(reactionTo(bash('rm -rf build'))?.chance).toBe(1)
+  expect(texts(reactionTo(bash('npm test', true)))).toContain('红了红了')
+  expect(texts(reactionTo(bash('git push')))).toContain('推了推了')
   expect(reactionTo({ kind: 'done', reason: 'aborted', durationMs: 1 })?.chance).toBe(1)
+  expect(reactionTo({ kind: 'tool', tool: 'mcp__srv__query', command: '', isError: false })).toBeUndefined()
+})
+
+test("every moment has heckles in both languages, and lines and philosophers' heckles with who and their school", () => {
+  for (const m of Object.keys(HECKLES) as Moment[]) {
+    expect(HECKLES[m].items.length).toBeGreaterThan(0)
+    for (const l of HECKLES[m].items) expect(l.zh !== '' && l.en !== '').toBe(true)
+    for (const table of [SAYINGS, JIBES]) {
+      expect(table[m].items.length).toBeGreaterThan(0)
+      for (const q of table[m].items) {
+        const fields = [q.zh, q.en, q.by.zh, q.by.en, q.by.school.zh, q.by.school.en]
+        expect(fields.every(f => f.trim() !== '')).toBe(true)
+      }
+    }
+  }
+})
+
+test('a reaction reads in the style and language asked', () => {
+  const fail = bash('npm test', true)
+  const camus = (r: Reaction | undefined) => r?.comments.find(c => /Sisyphus|西西弗斯/.test(c.text))
+  expect(camus(reactionTo(fail, 'philosophy', 'zh'))).toEqual({ text: '应当想象西西弗斯是幸福的', by: ' ——加缪（荒诞主义）', color: 'error' })
+  expect(camus(reactionTo(fail, 'philosophy', 'en'))).toEqual({ text: 'One must imagine Sisyphus happy.', by: ' — Camus (Absurdism)', color: 'error' })
+  expect(camus(reactionTo(fail, 'philosophy', 'both'))).toEqual({
+    text: '应当想象西西弗斯是幸福的 / One must imagine Sisyphus happy.',
+    by: ' —— 加缪 Camus（荒诞主义 Absurdism）',
+    color: 'error',
+  })
+  // A philosopher heckling: who says it goes first, as a chat name.
+  const popper = (r: Reaction | undefined) => r?.comments.find(c => /证伪|falsified/i.test(c.text))
+  expect(popper(reactionTo(fail, 'philosopher-heckle', 'zh'))).toEqual({
+    from: '波普尔（批判理性主义）：',
+    text: '被证伪了！恭喜，这才叫科学',
+    color: 'error',
+  })
+  expect(popper(reactionTo(fail, 'philosopher-heckle', 'en'))).toEqual({
+    from: 'Popper (Critical rationalism): ',
+    text: "Falsified! Congratulations, that's science.",
+    color: 'error',
+  })
+  expect(popper(reactionTo(fail, 'philosopher-heckle', 'both'))?.from).toBe('波普尔 Popper（批判理性主义 Critical rationalism）：')
+  expect(texts(reactionTo(fail, 'heckle', 'en'))).toContain('red red red')
+  expect(texts(reactionTo(fail, 'heckle', 'both'))).toContain('红了红了 / red red red')
+})
+
+test("reads a philosopher's lines out of a reply, however it is wrapped", () => {
+  const reply = [
+    '```json',
+    CAMUS.replace('"应当想象', '"「应当想象').replace('幸福的"', '幸福的。」"'),
+    '```',
+    '[{"en":"Everything flows.","whoEn":"Heraclitus","schoolEn":"Pre-Socratic"}]',
+    '{"zh":"无名之句","who":"","school":"道家"}',
+    CAMUS,
+    'not json at all',
+  ].join('\n')
+  expect(parseSayings(reply)).toEqual([
+    { zh: '应当想象西西弗斯是幸福的', en: 'One must imagine Sisyphus happy.', by: { zh: '加缪', en: 'Camus', school: { zh: '荒诞主义', en: 'Absurdism' } } },
+    {
+      zh: 'Everything flows.',
+      en: 'Everything flows.',
+      by: { zh: 'Heraclitus', en: 'Heraclitus', school: { zh: 'Pre-Socratic', en: 'Pre-Socratic' } },
+    },
+  ])
+  expect(buildPrompt(['a'], ['万物皆流 ——赫拉克利特（前苏格拉底）'], 'philosophy')).toContain('最近引过：万物皆流')
+  // A few schools to look in first, a different few each time.
+  expect(someSchools(3, () => 0)).toEqual(['儒家', '道家', '墨家'])
+  expect(new Set(someSchools(5)).size).toBe(5)
+  expect(buildPrompt(['a'], [], 'philosophy', ['禅宗', '现象学'])).toContain('这次先从禅宗、现象学里找')
+  expect(buildPrompt(['a'], [], 'heckle', ['禅宗'])).not.toContain('禅宗')
+  expect(buildPrompt(['a'], [], 'philosopher-heckle', ['禅宗'])).toContain('这次先请禅宗的哲学家来说')
 })
 
 test('describes a call in a few words for the model', () => {
@@ -263,6 +360,69 @@ test('with no band drawn anywhere (a claude -p run), the model is never asked', 
   await $.turn.complete(done)
   await clock.advance(10_000)
   expect(prompts).toEqual([])
+})
+
+test('in the philosophy style an rm -rf brings a line, who said it drawn dim', { options: { style: 'philosophy' } }, async ($, on) => {
+  const { clock } = world(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...WIDE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Client' }))?.props).toMatchObject({ props: { crossMs: 14_000 } })
+  await $.tool.call({ tool: 'Bash', command: 'rm -rf build' })
+  await clock.advance(100)
+  await ui.advance(6000)
+  const dim = (await ui.findAll({ type: 'Text', text: DANGER_BY, in: 'lanes' })).filter(t => t.props.dimColor === true)
+  expect(dim).toHaveLength(1)
+  expect(dim[0]?.text).toMatch(/——\S+（\S+）/)
+  await ui.unmount()
+})
+
+test("in the philosophy style the model is asked for lines, and its JSON flies as words and who said them", { options: { style: 'philosophy', language: 'english' } }, async ($, on) => {
+  const { clock, prompts, systems } = world(on, CAMUS)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...WIDE, surface: 'terminal' })
+  await $.tool.call({ tool: 'Read', file_path: '/r/a.ts' })
+  await $.tool.call({ tool: 'Read', file_path: '/r/b.ts' })
+  await $.tool.call({ tool: 'Read', file_path: '/r/c.ts' })
+  await clock.advance(3000)
+  expect(prompts.length).toBe(1)
+  expect(prompts[0]).toContain('引一句')
+  expect(systems[0]).toContain('"whoEn"')
+  await ui.advance(6000)
+  expect(await ui.find({ type: 'Text', text: /One must imagine Sisyphus happy\./, in: 'lanes' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /— Camus \(Absurdism\)/, in: 'lanes' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('in the philosopher-heckle style a philosopher heckles in their own voice, named first', { options: { style: 'philosopher-heckle' } }, async ($, on) => {
+  const { clock, prompts, systems } = world(on, PYRRHO, {})
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...WIDE, surface: 'terminal' })
+  expect((await $.command.run(run(''))).text).toContain('哲学家吐槽')
+  await $.tool.call({ tool: 'Read', file_path: '/r/a.ts' })
+  await $.tool.call({ tool: 'Read', file_path: '/r/b.ts' })
+  await $.tool.call({ tool: 'Read', file_path: '/r/c.ts' })
+  await clock.advance(3000)
+  expect(prompts.length).toBe(1)
+  expect(prompts[0]).toContain('的哲学家来说')
+  expect(systems[0]).toContain('从他自己的视角')
+  await ui.advance(6000)
+  const name = (await ui.findAll({ type: 'Text', text: /^皮浪（怀疑论）：$/, in: 'lanes' })).filter(t => t.props.dimColor === true)
+  expect(name).toHaveLength(1)
+  expect(await ui.find({ type: 'Text', text: /测试真的跑过吗？我存疑/, in: 'lanes' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('in English the heckles and the replies are English', { options: { language: 'english' } }, async ($, on) => {
+  const { clock } = world(on, '', {})
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await $.command.run(run(''))).text).toContain('Danmaku on')
+  await $.tool.call({ tool: 'Bash', command: 'rm -rf build' })
+  await clock.advance(100)
+  await ui.advance(2000)
+  expect(await ui.find({ type: 'Text', text: /here it comes|danger zone|steady hands|brace yourselves/, in: 'lanes' })).toBeDefined()
+  expect((await $.command.run(run('off'))).text).toBe('Danmaku off.')
+  await ui.unmount()
 })
 
 test('the lanes option sets the rows, and a short band gives way', { options: { lanes: '2' } }, async ($, on) => {

@@ -8,7 +8,8 @@ import type { Comment } from '../types'
 // second. Its pure parts are exported for the hooks module and the tests.
 
 export const FRAME_MS = 100
-// Every comment takes about this long to cross, so a long one moves faster.
+// Every comment takes about this long to cross, so a long one moves faster. A
+// philosopher's line, longer and read more slowly, is given more (the `crossMs` prop).
 export const CROSS_MS = 9000
 // Cells kept clear behind the comment ahead in a lane.
 const LANE_GAP = 4
@@ -37,14 +38,15 @@ export function cellsOf(s: string): number {
 
 // --- the lanes ------------------------------------------------------------------------
 
-// What the hooks module hands over: the latest comments, oldest first, by rising id.
-export type Props = { comments: Comment[]; lanes: number }
+// What the hooks module hands over: the latest comments, oldest first, by rising id,
+// and how long a new one takes to cross.
+export type Props = { comments: Comment[]; lanes: number; crossMs?: number }
 
 // One comment on screen: where it is in cells and how far it moves each frame.
 export type Flying = Comment & { width: number; lane: number; x: number; speed: number }
 export type Lanes = { items: Flying[]; pending: Comment[]; seen: number }
-export type Geo = { cols: number; lanes: number }
-export type Run = { text: string; color?: string; isMine?: boolean }
+export type Geo = { cols: number; lanes: number; crossMs?: number }
+export type Run = { text: string; color?: string; isMine?: boolean; isDim?: boolean }
 
 export const emptyLanes: Lanes = { items: [], pending: [], seen: 0 }
 
@@ -70,8 +72,8 @@ export function place(s: Lanes, comments: readonly Comment[], geo: Geo): Lanes {
   let items = s.items
   const left: Comment[] = []
   for (const c of [...s.pending, ...fresh]) {
-    const width = cellsOf(c.text)
-    const speed = (geo.cols + width) / (CROSS_MS / FRAME_MS)
+    const width = cellsOf((c.from ?? '') + c.text + (c.by ?? ''))
+    const speed = (geo.cols + width) / ((geo.crossMs ?? CROSS_MS) / FRAME_MS)
     const lane = freeLane(items, geo, speed)
     if (lane === undefined) left.push(c)
     else items = [...items, { ...c, width, lane, x: geo.cols, speed }]
@@ -85,30 +87,37 @@ export function step(s: Lanes, comments: readonly Comment[], geo: Geo): Lanes {
   return place({ ...s, items }, comments, geo)
 }
 
-type Cell = { ch: string; color?: string; isMine?: boolean; isTail?: boolean }
+type Style = { color?: string; isMine?: boolean; isDim?: boolean }
+type Cell = Style & { ch: string; isTail?: boolean }
 
 // One lane as styled runs `cols` cells wide: each comment at its column, cut at both
-// edges; half a wide letter at an edge is left blank.
+// edges, who says it dim before it or who said it dim after; half a wide letter at an
+// edge is left blank.
 export function layoutLane(items: readonly Flying[], cols: number): Run[] {
   const cells: Array<Cell | undefined> = new Array(Math.max(0, cols)).fill(undefined)
   for (const item of [...items].sort((a, b) => a.x - b.x)) {
     let p = Math.floor(item.x)
     let last = -1
-    for (const ch of item.text) {
-      const w = charCells(ch)
-      if (w === 0) {
-        const head = cells[last]
-        if (last >= 0 && head !== undefined) head.ch += ch
-        continue
+    const parts: Array<[string, Style]> = [[item.text, { color: item.color, isMine: item.isMine }]]
+    if (item.from) parts.unshift([item.from, { isDim: true }])
+    if (item.by) parts.push([item.by, { isDim: true }])
+    for (const [text, style] of parts) {
+      for (const ch of text) {
+        const w = charCells(ch)
+        if (w === 0) {
+          const head = cells[last]
+          if (last >= 0 && head !== undefined) head.ch += ch
+          continue
+        }
+        if (p >= 0 && p + w <= cols) {
+          // Writing over the second half of a wide letter blanks its first half.
+          if (cells[p]?.isTail && p > 0) cells[p - 1] = undefined
+          cells[p] = { ch, ...style }
+          if (w === 2) cells[p + 1] = { ch: '', ...style, isTail: true }
+          last = p
+        }
+        p += w
       }
-      if (p >= 0 && p + w <= cols) {
-        // Writing over the second half of a wide letter blanks its first half.
-        if (cells[p]?.isTail && p > 0) cells[p - 1] = undefined
-        cells[p] = { ch, color: item.color, isMine: item.isMine }
-        if (w === 2) cells[p + 1] = { ch: '', color: item.color, isMine: item.isMine, isTail: true }
-        last = p
-      }
-      p += w
     }
   }
 
@@ -117,19 +126,21 @@ export function layoutLane(items: readonly Flying[], cols: number): Run[] {
     const ch = cell === undefined ? NBSP : cell.ch
     const color = cell?.color
     const isMine = cell?.isMine
+    const isDim = cell?.isDim
     const prev = runs[runs.length - 1]
-    if (prev && prev.color === color && prev.isMine === isMine) prev.text += ch
+    if (prev && prev.color === color && prev.isMine === isMine && prev.isDim === isDim) prev.text += ch
     else {
       const run: Run = { text: ch }
       if (color !== undefined) run.color = color
       if (isMine !== undefined) run.isMine = isMine
+      if (isDim !== undefined) run.isDim = isDim
       runs.push(run)
     }
   }
   // Blank runs at the end draw nothing.
   while (runs.length > 0) {
     const tail = runs[runs.length - 1]
-    if (tail === undefined || tail.color !== undefined || tail.isMine !== undefined) break
+    if (tail === undefined || tail.color !== undefined || tail.isMine !== undefined || tail.isDim !== undefined) break
     const trimmed = tail.text.replace(/ +$/, '')
     if (trimmed !== '') {
       tail.text = trimmed
@@ -147,7 +158,11 @@ export function layoutLane(items: readonly Flying[], cols: number): Run[] {
 type Live = { props: Props; state: Lanes }
 const lives = new WeakMap<ClientSurface<Lanes>, Live>()
 
-const geoOf = (props: Props, cols: number): Geo => ({ cols: Math.max(12, cols - 1), lanes: Math.max(1, props.lanes) })
+const geoOf = (props: Props, cols: number): Geo => ({
+  cols: Math.max(12, cols - 1),
+  lanes: Math.max(1, props.lanes),
+  crossMs: props.crossMs,
+})
 
 function tick(surface: ClientSurface<Lanes>): void {
   const live = lives.get(surface)
@@ -186,8 +201,8 @@ const Screen: ClientModule<Props, Lanes> = (props, surface) => {
         {runs.length === 0
           ? NBSP
           : runs.map(run =>
-              run.color !== undefined || run.isMine ? (
-                <Text color={run.color} bold={run.isMine} underline={run.isMine}>
+              run.color !== undefined || run.isMine || run.isDim ? (
+                <Text color={run.color} bold={run.isMine} underline={run.isMine} dimColor={run.isDim}>
                   {run.text}
                 </Text>
               ) : (
