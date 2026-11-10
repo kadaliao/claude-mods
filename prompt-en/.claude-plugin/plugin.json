@@ -1,7 +1,7 @@
 {
   "name": "prompt-en",
-  "version": "0.4.0",
-  "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English, and a vocabulary book to review them. Or the same in Japanese",
+  "version": "0.5.0",
+  "description": "English under each prompt: a translation when you write in another language, corrections or other ways to say it when you write in English, and a vocabulary book to review them, in the terminal or on your phone. Or the same in Japanese",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/prompt-en",
   "repository": "https://github.com/kadaliao/claude-mods",
@@ -33,6 +33,12 @@
       "title": "Vocabulary book",
       "description": "Keep the corrections and the phrases worth learning for /vocab to review (a translation costs one more small call to pick its phrases)",
       "default": true
+    },
+    "exportDir": {
+      "type": "string",
+      "title": "Export the book to",
+      "description": "The folder the vocabulary book is written to as a deck, for the Snack flashcard app on your phone (its iCloud Inbox by default; written only once that folder's parent exists). Empty: no export",
+      "default": "~/Library/Mobile Documents/iCloud~com~kadaliao~snack/Documents/Inbox"
     }
   }
 }

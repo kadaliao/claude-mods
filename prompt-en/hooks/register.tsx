@@ -6,6 +6,7 @@ import { labelOf, langOf, nameOf, nsOf } from './lang'
 import type { Lang } from './lang'
 import { WIDE, keyOf, modeOf, ownWords, prepare, storeKey, withLabels } from './prompt'
 import type { Material, Mode, Prepared } from './prompt'
+import { DEFAULT_EXPORT_DIR, exportSoon, exportState } from './export'
 import { checkForUpdate } from './update'
 import { collect, parsePair, registerVocab, splitNote, startVocab } from './vocab'
 
@@ -274,6 +275,7 @@ async function save($: EngineInterface, key: string, t: Translation, lang: Lang)
 
 // Answers a prompt, and files what a new answer teaches in the vocabulary book;
 // one already answered (the same prompt again, a resume) is not collected twice.
+// Resolves with how many cards it filed.
 async function answer(
   $: EngineInterface,
   key: string,
@@ -282,16 +284,16 @@ async function answer(
   model: string,
   isCollecting: boolean,
   lang: Lang,
-): Promise<void> {
+): Promise<number> {
   const now = await $.clock.now()
   const current = await read($, memberOf(byText, { requestId: nsOf(lang) + key }))
-  if (current?.status === 'done') return
-  if (current?.status === 'pending' && now - (current.startedAt ?? 0) < STALE_MS) return
+  if (current?.status === 'done') return 0
+  if (current?.status === 'pending' && now - (current.startedAt ?? 0) < STALE_MS) return 0
 
   const saved = await loadSaved($, key, lang)
   if (saved !== null) {
     await update($, memberOf(byText, { requestId: nsOf(lang) + key }), () => saved)
-    return
+    return 0
   }
 
   const prepared = prepare(text)
@@ -320,9 +322,10 @@ async function answer(
     done = review !== null ? { status: 'done', ...meta, ...review } : { status: 'failed', text: '', reason: 'unreadable-reply', ...meta }
   }
   await update($, memberOf(byText, { requestId: nsOf(lang) + key }), () => done)
-  if (done.status !== 'done') return
+  if (done.status !== 'done') return 0
   await save($, key, done, lang)
-  if (isCollecting) await collect($, key, done, withLabels(prepared.prose, prepared.materials), prepared.proseWeight, model, lang)
+  if (!isCollecting) return 0
+  return collect($, key, done, withLabels(prepared.prose, prepared.materials), prepared.proseWeight, model, lang)
 }
 
 // --- drawing --------------------------------------------------------------------
@@ -370,7 +373,9 @@ export const register: Register = (on, options) => {
   const isCollecting = options.collectVocab !== false
   const lang = langOf(options.language)
   const name = nameOf(lang)
-  registerVocab(on, model, lang)
+  // Where the book goes for the Snack app; '' writes it nowhere.
+  const exporting = exportState(typeof options.exportDir === 'string' ? options.exportDir : DEFAULT_EXPORT_DIR, lang)
+  registerVocab(on, model, lang, exporting)
   // The submission whose row is being appended, so the row's id can be tied to it.
   let submitted: string | undefined
 
@@ -385,6 +390,7 @@ export const register: Register = (on, options) => {
     const saved = await $.store.get('enabled')
     if (typeof saved === 'boolean') await update($, isOn, () => saved)
     await startVocab($, lang)
+    exportSoon($, exporting)
     if (e.isInteractive) void checkForUpdate($).catch(() => {})
     return started
   })
@@ -411,7 +417,11 @@ export const register: Register = (on, options) => {
     if (mode !== null && (mode === 'translate' || isReviewing) && (await read($, isOn))) {
       const key = keyOf(own)
       submitted = key
-      void answer($, key, own, mode, model, isCollecting, lang).catch(() => {})
+      void answer($, key, own, mode, model, isCollecting, lang)
+        .then(filed => {
+          if (filed > 0) exportSoon($, exporting)
+        })
+        .catch(() => {})
     }
     return next(e)
   })

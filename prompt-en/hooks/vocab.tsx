@@ -2,6 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderNode } from 'claude-code'
 
 import type { Grade, Quiz, Translation, VocabCard } from '../types'
+import { MAX_DROPPED, droppedKeyOf, loadDeck, loadDropped, prefixOf } from './book'
+import type { ExportState } from './export'
+import { exportReport, exportSoon } from './export'
 import { countKana, nameOf, nsOf, zhNameOf } from './lang'
 import type { Lang } from './lang'
 import { countForeign, keyOf, modeOf, ownWords, prepare, storeKey, weightOf, withLabels } from './prompt'
@@ -33,8 +36,6 @@ const PANE = 'vocab'
 // The key of the pane's main control in every state: show the answer, known, more.
 export const MAIN = 'main'
 const TITLE = '生词本'
-// Where a language's cards are kept: `v:<id>` for English, `ja:v:<id>` for Japanese.
-const prefixOf = (lang: Lang) => `${nsOf(lang)}v:`
 // Days a card in each box waits before it is due again.
 const BOX_DAYS = [0, 1, 3, 7, 16, 35, 90]
 const DAY_MS = 86_400_000
@@ -314,16 +315,6 @@ async function pickAndFile(
 
 // --- the book -----------------------------------------------------------------------
 
-async function loadDeck($: EngineInterface, lang: Lang): Promise<VocabCard[]> {
-  const keys = (await $.store.keys()).filter(k => k.startsWith(prefixOf(lang)))
-  const cards: VocabCard[] = []
-  for (const key of keys) {
-    const card = (await $.store.get(key)) as VocabCard | undefined
-    if (card && typeof card.cue === 'string' && typeof card.answer === 'string') cards.push(card)
-  }
-  return cards
-}
-
 async function saveCard($: EngineInterface, card: VocabCard, lang: Lang): Promise<void> {
   await $.store.set(prefixOf(lang) + card.id, card)
 }
@@ -422,11 +413,11 @@ async function grade($: EngineInterface, at: number, g: Grade, lang: Lang): Prom
 }
 
 async function drop($: EngineInterface, at: number, lang: Lang): Promise<void> {
-  let id: string | undefined
+  let dropped: VocabCard | undefined
   await update($, quiz, q => {
     const card = q?.cards[at]
     if (!q || !card || q.index !== at) return q
-    id = card.id
+    dropped = card
     return {
       ...q,
       cards: q.cards.filter((c, i) => i <= at || c.id !== card.id),
@@ -435,7 +426,11 @@ async function drop($: EngineInterface, at: number, lang: Lang): Promise<void> {
       deckSize: q.deckSize - 1,
     }
   })
-  if (id) await $.store.delete(prefixOf(lang) + id)
+  if (dropped === undefined) return
+  await $.store.delete(prefixOf(lang) + dropped.id)
+  const { id, kind, cue, answer } = dropped
+  const kept = (await loadDropped($, lang)).filter(d => d.id !== id)
+  await $.store.set(droppedKeyOf(lang), [...kept, { id, kind, cue, answer }].slice(-MAX_DROPPED))
 }
 
 // --- what was filed already ------------------------------------------------------------
@@ -453,6 +448,7 @@ async function markDone($: EngineInterface, keys: readonly string[], lang: Lang)
 
 // What a finished answer to the prompt under `key` teaches, filed: the changes a
 // review names, or what a small model picks from a translation of words weighing `weight`.
+// Resolves with how many cards it filed.
 export async function collect(
   $: EngineInterface,
   key: string,
@@ -461,11 +457,13 @@ export async function collect(
   weight: number,
   model: string,
   lang: Lang = 'en',
-): Promise<void> {
-  if (t.status !== 'done') return
-  if (t.kind === 'review') await file($, fromReview(t), lang)
-  else if (weight >= MIN_PICK_SOURCE) await pickAndFile($, [{ source, target: t.text }], model, lang)
+): Promise<number> {
+  if (t.status !== 'done') return 0
+  let filed: VocabCard[] = []
+  if (t.kind === 'review') filed = await file($, fromReview(t), lang)
+  else if (weight >= MIN_PICK_SOURCE) filed = await pickAndFile($, [{ source, target: t.text }], model, lang)
   await markDone($, [key], lang)
+  return filed.length
 }
 
 // --- importing what came before the book ----------------------------------------------------
@@ -582,8 +580,8 @@ const EMPTY: Record<Lang, string> = {
 export async function startVocab($: EngineInterface, lang: Lang = 'en'): Promise<void> {
   await $.command.register({
     name: 'vocab',
-    description: `Review the ${nameOf(lang)} prompt-en taught you, flashcard style (list: the latest cards; import: the prompts from before)`,
-    argumentHint: '[list|import]',
+    description: `Review the ${nameOf(lang)} prompt-en taught you, flashcard style (list: the latest cards; import: the prompts from before; export: to the Snack app on your phone)`,
+    argumentHint: '[list|import|export]',
     // Reviewing is for any moment, a turn in flight included: it never waits for one to end.
     immediate: true,
   })
@@ -616,19 +614,25 @@ async function takeKeys($: EngineInterface): Promise<void> {
   }
 }
 
-export function registerVocab(on: On, model: string, lang: Lang = 'en'): void {
+export function registerVocab(on: On, model: string, lang: Lang = 'en', exporting?: ExportState): void {
   let isImporting = false
 
   on('command.run', { command: 'vocab' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
     if (arg === 'list' || arg === 'ls') return { text: listText(await loadDeck($, lang), await $.clock.now(), lang) }
+    if (arg === 'export') {
+      return { text: exporting ? await exportReport($, exporting) : '生词本没有设置导出。' }
+    }
     if (arg === 'import') {
       if (isImporting) return { text: '生词本：正在导入，完成后会提示。' }
       isImporting = true
       // On a timer, so the import outlives the command.
       $.clock.after(0, () => {
         void importPast($, model, lang)
-          .then(r => $.ui.toast(importedText(r), { timeoutMs: 8000 }))
+          .then(r => {
+            $.ui.toast(importedText(r), { timeoutMs: 8000 })
+            if (r.cards > 0 && exporting) exportSoon($, exporting)
+          })
           .catch(() => $.ui.toast('生词本导入失败，可以再试一次 /vocab import'))
           .finally(() => {
             isImporting = false

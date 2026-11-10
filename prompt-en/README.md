@@ -134,6 +134,21 @@ cards are due, a toast says so at the start of a session, at most twice a day.
 
 ![/vocab list: the latest cards and how well each is known](../docs/prompt-en/vocab-list.png)
 
+### On your phone
+
+The book is also written out for Snack (卡片零食), a flashcard app for the iPhone, so the cards
+can be reviewed away from the terminal. At the start of a session, and when cards come in (at
+most once a minute), prompt-en writes the whole book as one deck file into Snack's iCloud folder,
+`~/Library/Mobile Documents/iCloud~com~kadaliao~snack/Documents/Inbox`, and iCloud brings it to
+the phone. The file holds what each card teaches, not how well you know it: the phone keeps its
+own progress. A card dropped with `x` is marked deleted, so the phone drops it too.
+
+Nothing is written until that folder is there, which is once Snack is installed and opened on a
+phone signed in to the same iCloud account; a folder made there by hand would not sync.
+`/vocab export` writes at once and says where. The `exportDir` option points it at another
+folder, or turns it off when empty. The format is open:
+[deck/1](https://github.com/kadaliao/snack/blob/main/spec/deck-format.md).
+
 ## Install
 
 At the prompt of a terminal session:
@@ -174,8 +189,9 @@ then `/reload-plugins`. It only tells you; it never installs anything.
 | `language` option | `english` by default; `japanese` for Japanese under your prompts and reviews of your Japanese |
 | `model` option | `haiku` by default; `sonnet` or `opus` |
 | `reviewEnglish` option | `true` by default; `false` keeps translations and drops the reviews of your English (or Japanese) |
-| `/vocab` | Reviews the vocabulary book's due cards in a pane; `/vocab list` lists the latest; `/vocab import` files the prompts from before the book |
+| `/vocab` | Reviews the vocabulary book's due cards in a pane; `/vocab list` lists the latest; `/vocab import` files the prompts from before the book; `/vocab export` writes it out for the phone |
 | `collectVocab` option | `true` by default; `false` stops filling the vocabulary book and its extra call |
+| `exportDir` option | Snack's iCloud Inbox by default; another folder, or empty for no export |
 
 Options are set in the plugin's options (`/config`).
 
@@ -207,6 +223,8 @@ wrote it.
   keeps is left out.
 - The vocabulary book is kept in the plugin store, on this machine, up to 1,000 cards; past that
   the best-known oldest leave.
+- The export holds the sentences your cards came from, parts of your prompts among them, and
+  goes to your iCloud Drive.
 - The update check reaches raw.githubusercontent.com at most once a day and sends nothing of
   yours; with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set it does not run.
 - Your own words are sent up to 6,000 characters; past that the answer covers the start.

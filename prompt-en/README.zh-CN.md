@@ -93,6 +93,12 @@ f: 显示答案   Esc 关闭
 
 ![/vocab list：最近收的卡片和熟练度](../docs/prompt-en/vocab-list.png)
 
+### 在手机上复习
+
+生词本也会写给卡片零食（Snack），一个 iPhone 上的闪卡 app，离开终端也能复习。会话开始时，以及收进新卡时（最多每分钟一次），prompt-en 把整本生词本写成一个牌组文件，放进卡片零食的 iCloud 文件夹 `~/Library/Mobile Documents/iCloud~com~kadaliao~snack/Documents/Inbox`，iCloud 会把它同步到手机上。文件里只有每张卡教的内容，没有熟练度：复习进度由手机自己记。在 `/vocab` 里按 `x` 删掉的卡会标成已删除，手机上也跟着删掉。
+
+这个文件夹出现之前不会写任何东西：要先在登录同一个 iCloud 账户的 iPhone 上装好卡片零食并打开一次。不要手动建这个文件夹，手动建的不会同步。`/vocab export` 立即写一次，并告诉你写到了哪里。`exportDir` 选项可以改成别的文件夹，设成空的就不导出。格式是公开的：[deck/1](https://github.com/kadaliao/snack/blob/main/spec/deck-format.md)。
+
 ## 安装
 
 在终端会话的输入框里：
@@ -131,8 +137,9 @@ claude plugin update prompt-en@kadaliao
 | `language` 选项 | 默认 `english`；设为 `japanese` 后，prompt 下方显示日语，并批改你写的日语 |
 | `model` 选项 | 默认 `haiku`，可以改成 `sonnet` 或 `opus` |
 | `reviewEnglish` 选项 | 默认 `true`；设为 `false` 后只保留翻译，不再批改你写的英文（或日语） |
-| `/vocab` | 在面板里复习生词本里到期的卡片；`/vocab list` 列出最近收的；`/vocab import` 导入以前的 prompt |
+| `/vocab` | 在面板里复习生词本里到期的卡片；`/vocab list` 列出最近收的；`/vocab import` 导入以前的 prompt；`/vocab export` 写给手机上的卡片零食 |
 | `collectVocab` 选项 | 默认 `true`；设为 `false` 后不再往生词本里收，也不再多发那次请求 |
+| `exportDir` 选项 | 默认是卡片零食的 iCloud 收件箱；可以改成别的文件夹，设成空的就不导出 |
 
 选项在插件选项（`/config`）里设置。
 
@@ -148,6 +155,7 @@ mod 写的内容都不会发给对话所用的模型，模型读到的仍是你�
 - 开着生词本时，每条译文多发一次小请求来挑短语和句型（很短的 prompt 跳过）；纠错不额外花钱。
 - `/vocab import` 只能从输入历史里找翻译的原文：带粘贴内容的 prompt（历史里显示成 `[Pasted text #1]`），以及早于 store 保留的最近 300 条的，都导不进来。
 - 生词本存在本机的插件 store 里，最多 1000 张；超出后最熟的老卡片先删。
+- 导出的文件里有卡片出处的句子，其中有你 prompt 里的原话，会存进你的 iCloud 云盘。
 - 检查新版本时，每天最多访问一次 raw.githubusercontent.com，不发送任何你的内容；设置了 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` 时不检查。
 - 你自己写的文字最多发送 6000 个字符，超出部分只处理开头。
 - 请求失败时留一行灰字 `no translation (overloaded)` 或 `no review (…)`，不自动重试；再次提交同样的文字会重试。
