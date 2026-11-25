@@ -30,6 +30,11 @@
       "name": "peek",
       "source": "./peek",
       "description": "See the pictures Claude looks at: a thumbnail under each Read or screenshot in the conversation and under each pasted picture, large under ctrl+o or one at a time with /peek, drawn with the terminal's own pictures"
+    },
+    {
+      "name": "open-file",
+      "source": "./open-file",
+      "description": "Click a file path in Claude's replies to open the file in a pane on the right, one tab per file, scrolled to the line the path names"
     }
   ]
 }
