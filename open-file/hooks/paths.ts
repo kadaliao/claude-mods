@@ -1,6 +1,10 @@
 // Finding file paths in a reply's markdown and turning them into file: links.
 // Pure: whether a path is a file is the caller's to ask.
 
+// A longer way to read a path in prose, past where its run of path characters
+// stopped: where it ends in the text, the path it reads, the line it names.
+export type Reading = { to: number; path: string; line?: number }
+
 // One place in the text that may name a file.
 export type Hit = {
   // Where it is in the text: [from, to).
@@ -12,6 +16,10 @@ export type Hit = {
   // plain: a run of path characters in prose; code: a whole inline code span;
   // link: a markdown link whose target is no URL (`[x](src/x.ts#L3)`).
   kind: 'plain' | 'code' | 'link'
+  // A plain path cut short by a space or a Chinese character may go on past it
+  // (`/Users/me/截图/截图 2026.png`): its longer readings, longest first.
+  // The caller links the first that is a file, else the hit as it is.
+  longer?: Reading[]
 }
 
 const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/
@@ -30,6 +38,11 @@ const DOTFILE = /^\.[A-Za-z][\w\-.]*$/
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/
 // The most places one reply is asked about.
 const MOST_HITS = 120
+// What ends a path's longer readings: Chinese punctuation, a tab, two spaces.
+const STOP = /[\t。，；：！？、（）【】「」『』《》“”‘’]| {2}/
+// How far past its run a path is read on, and in how many ways at most.
+const LONGER_REACH = 240
+const MOST_LONGER = 6
 
 // Whether a string could be a path at all: a slash in it, a name with an
 // extension, or a dotfile. Whether it is a file is asked after.
@@ -100,13 +113,41 @@ function scanProse(text: string, at: number, hits: Hit[]): void {
   for (let m = PATH_RUN.exec(text); m !== null; m = PATH_RUN.exec(text)) {
     const run = m[0]
     const path = run.replace(/\.+$/, '')
-    if (!isPathLike(path)) continue
     const end = m.index + run.length
+    // A folder path may go on past a space or Chinese; `~/` and `/` alone
+    // only start one (`~/截图/a.png`).
+    const longer = path.length === run.length && path.includes('/') ? longerOf(text, m.index, end) : []
+    if (!isPathLike(path) && !(/^~?\/$/.test(path) && longer.length > 0)) continue
     // A suffix only where the run did not end on a full stop.
     const suffix = path.length === run.length ? SUFFIX.exec(text.slice(end)) : null
     const to = m.index + path.length + (suffix?.[0].length ?? 0)
-    hits.push({ from: at + m.index, to: at + to, path, line: lineOf(suffix?.[1], suffix?.[2]), kind: 'plain' })
+    const hit: Hit = { from: at + m.index, to: at + to, path, line: lineOf(suffix?.[1], suffix?.[2]), kind: 'plain' }
+    if (longer.length > 0) hit.longer = longer.map(r => ({ ...r, to: at + r.to }))
+    hits.push(hit)
   }
+}
+
+// The longer readings of the path starting at `start` in `text`, whose run of
+// path characters ends at `end` on a space or a character outside it: each
+// runs on to where a later run ends, short of a stop. Longest first.
+export function longerOf(text: string, start: number, end: number): Reading[] {
+  if (!/^(?: [^ ]|[^\x00-\x7f])/.test(text.slice(end, end + 2))) return []
+  let reach = text.slice(end, end + LONGER_REACH)
+  const stop = STOP.exec(reach)
+  if (stop !== null) reach = reach.slice(0, stop.index)
+  const out: Reading[] = []
+  const runs = /[A-Za-z0-9_\-.~/@+]+/g
+  for (let m = runs.exec(reach); m !== null && out.length < MOST_LONGER; m = runs.exec(reach)) {
+    const kept = m[0].replace(/\.+$/, '')
+    // A line number is the suffix of the reading before it, not one of its own.
+    if (kept === '' || /[:#]$/.test(reach.slice(0, m.index))) continue
+    const close = end + m.index + kept.length
+    const path = text.slice(start, close)
+    if (!isPathLike(path)) continue
+    const suffix = kept.length === m[0].length ? SUFFIX.exec(text.slice(close)) : null
+    out.push({ to: close + (suffix?.[0].length ?? 0), path, line: lineOf(suffix?.[1], suffix?.[2]) })
+  }
+  return out.reverse()
 }
 
 function safeDecode(s: string): string {

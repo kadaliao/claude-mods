@@ -12,6 +12,8 @@ const FILES: Record<string, string> = {
   '/Users/me/notes/todo.txt': 'milk\n',
   '/repo/a/index.ts': 'a\n',
   '/repo/b/index.ts': 'b\n',
+  '/Users/me/Desktop/截图 2026-11-25.png': 'png\n',
+  '/repo/工作记录/配置说明.md': 'one\ntwo\n',
 }
 for (let i = 0; i < 10; i++) FILES[`/repo/f${i}.ts`] = `${i}\n`
 const VIEWPORT = { columns: 160, rows: 40, isFullscreen: true }
@@ -140,6 +142,43 @@ test('a reply links the paths that are files, and a click opens the pane at the 
     ['line two', 2],
     ['line three', 3],
   ])
+  expect((await pane.find({ key: 'at-1' }))?.type).toBe('Box')
+  await pane.unmount()
+})
+
+test('a path in prose reads on past a space or Chinese to the file it names', () => {
+  const longer = (text: string) => findHits(text).map(h => [h.path, (h.longer ?? []).map(r => [r.path, r.line ?? null])])
+  expect(longer('/Users/me/Desktop/截图 2026-11-25.png')).toEqual([
+    ['/Users/me/Desktop/', [['/Users/me/Desktop/截图 2026-11-25.png', null]]],
+    ['2026-11-25.png', []],
+  ])
+  // Up to Chinese punctuation, a line number its suffix; `~/` alone starts one.
+  expect(longer('看 ~/截图/a b.png:3。下一句 x/y.ts')).toEqual([
+    ['~/', [['~/截图/a b.png', 3], ['~/截图/a', null]]],
+    ['/a', [['/a b.png', 3]]],
+    ['b.png', []],
+    ['x/y.ts', []],
+  ])
+  // Glued to Chinese, the path alone: the longer reading names no file.
+  expect(longer('看一下src/app.ts文件')).toEqual([['src/app.ts', []]])
+})
+
+test('a path with a space or Chinese in it is linked whole', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({
+    ...reply('图片 /Users/me/Desktop/截图 2026-11-25.png，笔记 /repo/工作记录/配置说明.md:2。看一下src/app.ts文件，see /repo/src/app.ts and more'),
+    surface: 'terminal',
+  })
+  const picture = fileHref('/Users/me/Desktop/截图 2026-11-25.png')
+  const notes = fileHref('/repo/工作记录/配置说明.md', 2)
+  expect((await ui.find({ type: 'Markdown' }))?.props.text).toBe(
+    `图片 [/Users/me/Desktop/截图 2026-11-25.png](${picture})，笔记 [/repo/工作记录/配置说明.md:2](${notes})。` +
+      '看一下[src/app.ts](file:///repo/src/app.ts)文件，see [/repo/src/app.ts](file:///repo/src/app.ts) and more',
+  )
+  await ui.press({ key: 'reply-m1', link: { href: notes } })
+  await ui.unmount()
+  const pane = await $.ui.mount({ ...PANE, requestId: tabIdOf('/repo/工作记录/配置说明.md'), surface: 'terminal' })
+  expect((await pane.find({ type: 'Text', text: /配置说明/ }))?.text).toBe('工作记录/配置说明.md:2')
   expect((await pane.find({ key: 'at-1' }))?.type).toBe('Box')
   await pane.unmount()
 })

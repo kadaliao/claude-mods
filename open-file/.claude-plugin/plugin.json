@@ -1,10 +1,10 @@
 {
   "name": "open-file",
-  "version": "0.1.0",
-  "description": "Click a file path in Claude's replies to open the file in a pane on the right, one tab per file, scrolled to the line the path names",
+  "version": "0.2.0",
+  "description": "Click a file path in Claude's replies to open the file in a pane on the right, one tab per file, scrolled to the line the path names; a picture opens fitted to the pane, and turns with a click",
   "author": { "name": "kadaliao", "url": "https://github.com/kadaliao" },
   "homepage": "https://github.com/kadaliao/claude-mods/tree/main/open-file",
   "repository": "https://github.com/kadaliao/claude-mods",
-  "keywords": ["file", "path", "link", "pane", "tabs", "viewer", "mod"],
+  "keywords": ["file", "path", "link", "pane", "tabs", "viewer", "image", "mod"],
   "types": "./types/index.d.ts"
 }

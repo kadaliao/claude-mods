@@ -11,7 +11,7 @@
 | [danmaku](danmaku/) | Claude 干活时输入框上方几条轨道飘 B 站风格弹幕，实时吐槽它在干什么：`rm -rf`、测试挂了这类事马上有反应，其余由小模型每隔几秒写几句。也可以换成各家哲学名言（附人名和流派），或让哲学家从自己流派的角度吐槽；中文、英文或双语<br><img src="docs/danmaku/danmaku-lanes.gif" width="600" alt="danmaku：Claude 干活时输入框上方飞过的弹幕"> |
 | [ambience](ambience/) | 给 Claude 的动作配音效（跑命令咔哒、改文件啵、测试通过放号角、失败放悲伤长号、一轮结束响铃），长任务结束发系统通知，输入框下方实时显示本轮战报<br><img src="docs/ambience/ambience-tally.png" width="600" alt="ambience：输入框下方的本轮战报"> |
 | [peek](peek/) | 把 Claude 看过的图画在对话里：每次 Read 或截图（Claude in Chrome、computer use、任何 MCP 工具）和每张粘贴的图下面一张缩略图，ctrl+o 或全屏模式下点「放大」看大图，用终端自己的图片功能画 |
-| [open-file](open-file/) | 点 Claude 回复里的文件路径（`src/app.ts:42`、`README.md`、`~/notes/todo.txt`），文件在右侧面板打开，带高亮并滚到路径指明的那一行，每个文件一个标签页；需要全屏模式 |
+| [open-file](open-file/) | 点 Claude 回复里的文件路径（`src/app.ts:42`、`README.md`、`~/notes/todo.txt`），文件在右侧面板打开，带高亮并滚到路径指明的那一行，每个文件一个标签页；图片缩放到面板大小显示，点一下就能旋转；需要全屏模式 |
 
 安装某个 mod，在 Claude Code 终端会话的输入框里输入：
 
