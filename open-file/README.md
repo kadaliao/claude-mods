@@ -18,6 +18,8 @@ tab of its own.
                                         │ 43 // the line after
 ```
 
+![Clicking the paths in Claude's reply: two code files and a picture open in tabs on the right, scrolled to their lines, and the picture is turned](../docs/open-file/open-file-pane.gif)
+
 ## Install
 
 At the prompt of a terminal session:

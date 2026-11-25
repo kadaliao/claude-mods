@@ -15,6 +15,8 @@ says `Read image (142KB)`. A picture you paste into a prompt is drawn under your
      └────────────────────────────┘
 ```
 
+![Claude reads a screenshot: a thumbnail under its row, drawn large in place with a click on 放大, and back](../docs/peek/peek-zoom.gif)
+
 ## Install
 
 At the prompt of a terminal session:
