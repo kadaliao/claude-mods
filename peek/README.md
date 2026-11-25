@@ -38,31 +38,13 @@ There is nothing to type after that: the next picture Claude reads shows up unde
 - **A pasted picture**: the same thumbnail, under your prompt.
 - **Several Reads folded into one line** ("Read 3 files"): their thumbnails side by side under
   that line, 4 rows each, up to 12.
-- **`/peek`**: a pane above the prompt (beside the transcript in fullscreen) shows the session's
-  pictures one at a time, as large as the pane, newest first. `p` and `n` turn to the previous and
-  next, Esc closes it, and so does `/peek` again. It works mid-turn, with verbose on, and for
-  pictures already printed.
+- **放大 (zoom)**: under fullscreen rendering (`/tui fullscreen`) a button under the pictures
+  draws them large in place with a click, up to 30 rows, the full width and no taller than the
+  screen; it then reads 缩小, and a second click takes them back. A folded line's pictures zoom
+  together. The main screen reports no clicks, so there the button is not drawn.
 - **ctrl+o**: the expanded transcript draws every picture large, up to 30 rows and the full width.
   With verbose on (Verbose output in `/config`) every row is already expanded and peek cannot tell
-  ctrl+o apart, so pictures keep the size the `size` option sets; `/peek` still shows them large.
-
-### A key for `/peek`
-
-A mod cannot bind a key itself, but Claude Code can bind one to a slash command. In
-`~/.claude/keybindings.json` (merge it in if the file exists):
-
-```json
-{
-  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
-  "$docs": "https://code.claude.com/docs/en/keybindings",
-  "bindings": [
-    { "context": "Chat", "bindings": { "ctrl+x p": "command:peek" } }
-  ]
-}
-```
-
-ctrl+x then p opens the pane from the prompt and, while the prompt has the keys, closes it. No
-default binding uses it. While the pane has the keys, Esc closes it.
+  ctrl+o apart, so pictures keep the size the `size` option sets; set it to `large` for bigger ones.
 
 ## Terminals
 

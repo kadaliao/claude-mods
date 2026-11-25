@@ -14,10 +14,6 @@ export type Shot = {
 // the row that says how to get them (`hint`), the first time on this terminal.
 export type Probe = { canDraw: 'unknown' | 'yes' | 'no'; hintAt?: string; hint?: string }
 
-// What the /peek pane shows: the picture by its id ('' for the newest), and
-// how many pictures the session has collected, so a new one redraws the pane.
-export type View = { id: string; seen: number }
-
 declare module 'claude-code' {
   interface PluginState {
     peek: {
@@ -27,7 +23,8 @@ declare module 'claude-code' {
       probe: Shaped<Probe>
       // Whether the verbose setting is on.
       verbose: boolean
-      view: Shaped<View>
+      // Whether the person zoomed a row's pictures with the button under them, by the row's id.
+      zoomed: StateFamily<boolean>
     }
   }
 }

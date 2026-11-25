@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { Elements, EngineInterface, ImageSource, Register, RenderElement, RenderNode, RenderViewport } from 'claude-code'
 
-import type { Probe, Shot, View } from '../types'
+import type { Probe, Shot } from '../types'
 import { noteCalls, pastedOf, picturesOf, promptKey } from './collect'
 import type { Found, ToolUse } from './collect'
 import { draw, fit, forget, forgetAll } from './picture'
@@ -14,16 +14,11 @@ const GROUP_THUMBS = 12
 const INDENT = 5
 // Where a prompt's text starts in its row ("❯ ").
 const PROMPT_INDENT = 2
-// The pane /peek opens: the session's pictures one at a time, as large as it is.
-const PANE = 'peek'
-const PANE_TITLE = '图片'
-// The body rows it asks for above the prompt: a picture up to 30 rows, its
-// caption and its keys. The layout may give fewer.
-const PANE_ROWS = 32
-// The most of the terminal's width a dock beside a fullscreen transcript gives.
-const DOCK_SHARE = 0.45
-// Waits before each ask for the keyboard after /peek has run.
-const FOCUS_WAITS_MS = [30, 150, 500]
+// The most rows a large picture takes: under ctrl+o, or zoomed by its button.
+const BIG_ROWS = 30
+// What a zoomed picture leaves of the screen for the prompt and what sits around
+// it, so the whole picture shows at once.
+const SCREEN_KEEP = 8
 // Told to the model, so it shows a picture by reading it, not by opening it in
 // another app: without it, "show me a picture" ends in Preview.
 const PICTURES_NOTE = `# Pictures in the terminal
@@ -34,7 +29,8 @@ const shots = atom({ plugin: 'peek', key: 'shots' } as const, [])
 const probeState = atom({ plugin: 'peek', key: 'probe' } as const, { canDraw: 'unknown' }, { shape: 'probe-1' })
 // The verbose setting: every row then says it is expanded, as under ctrl+o.
 const verboseState = atom({ plugin: 'peek', key: 'verbose' } as const, false)
-const viewState = atom({ plugin: 'peek', key: 'view' } as const, { id: '', seen: 0 }, { shape: 'view-1' })
+// A family: whether the person zoomed a row's pictures with its button, by the row's id.
+const zoomState = atom({ plugin: 'peek', key: 'zoomed' } as const, false)
 
 type Terminal = Elements['terminal']
 type Shown = Shot & { data?: string }
@@ -42,8 +38,6 @@ type Shown = Shot & { data?: string }
 // Bytes by picture id, oldest first. Kept in the module, not in state: a
 // reload reads them back from the conversation.
 const bytes = new Map<string, string>()
-// What each kept picture is, by its id, for the /peek pane.
-const kept = new Map<string, Shot>()
 // The session's tool calls by tool_use_id, to label what they return.
 const calls = new Map<string, ToolUse>()
 // The last picture drawn as an Image while it is unknown whether the terminal
@@ -54,23 +48,11 @@ let isProbing = false
 function keep(shot: Shot, data: string): void {
   bytes.delete(shot.id)
   bytes.set(shot.id, data)
-  kept.set(shot.id, shot)
   for (const old of bytes.keys()) {
     if (bytes.size <= KEEP) break
     bytes.delete(old)
-    kept.delete(old)
     forget(old)
   }
-}
-
-// The pictures the session keeps, oldest first: what /peek turns through.
-function gallery(): Shown[] {
-  const list: Shown[] = []
-  for (const [id, data] of bytes) {
-    const shot = kept.get(id)
-    if (shot !== undefined) list.push({ ...shot, data })
-  }
-  return list
 }
 
 // Files what a row brought under the calls that returned it.
@@ -82,30 +64,6 @@ async function add($: EngineInterface, found: Found[]): Promise<void> {
     byCall.set(f.callId, [...(byCall.get(f.callId) ?? []), f.shot])
   }
   for (const [callId, list] of byCall) await update($, memberOf(shots, { requestId: callId }), () => list)
-  await update($, viewState, v => ({ ...v, seen: v.seen + found.length }))
-}
-
-// Gives the pane the keyboard, so p and n work at once. The surface grants it
-// only over an empty prompt, and while /peek runs the prompt may still hold the
-// command, so it is asked again after, until the pane has the keys or is closed.
-async function takeKeys($: EngineInterface): Promise<void> {
-  for (const ms of FOCUS_WAITS_MS) {
-    await $.clock.sleep(ms)
-    const pane = (await $.ui.panes()).find(p => p.id === PANE)
-    if (pane === undefined || pane.isFocused) return
-    await $.ui.open({ id: PANE, title: PANE_TITLE, focus: true, closeOnEscape: true })
-  }
-}
-
-// Moves the pane `by` pictures from the one it shows, round from either end.
-async function turn($: EngineInterface, by: number): Promise<void> {
-  const list = gallery()
-  if (list.length === 0) return
-  const v = await read($, viewState)
-  let i = list.findIndex(s => s.id === v.id)
-  if (i < 0) i = list.length - 1
-  const next = list[(i + by + list.length) % list.length]
-  await update($, viewState, x => ({ ...x, id: next.id }))
 }
 
 // Reads the pictures back from the conversation: on a resume, and after a
@@ -214,9 +172,14 @@ async function pastedFor($: EngineInterface, requestId: string, text: string): P
   return []
 }
 
+// The rows a large picture may take on this screen.
+function bigRowsOf(viewport: RenderViewport | undefined): number {
+  return Math.max(16, Math.min(BIG_ROWS, (viewport?.rows ?? 40) - SCREEN_KEEP))
+}
+
 // The box each picture may take: one picture, or each of several side by side.
-function boxOf(room: number, count: number, isBig: boolean, isLarge: boolean): { maxCols: number; maxRows: number } {
-  if (isBig) return { maxCols: room, maxRows: 30 }
+function boxOf(room: number, count: number, isBig: boolean, isLarge: boolean, bigRows = BIG_ROWS): { maxCols: number; maxRows: number } {
+  if (isBig) return { maxCols: room, maxRows: bigRows }
   if (count > 1) return isLarge ? { maxCols: 28, maxRows: 6 } : { maxCols: 20, maxRows: 4 }
   return isLarge ? { maxCols: room, maxRows: 16 } : { maxCols: Math.min(room, 36), maxRows: 5 }
 }
@@ -246,9 +209,34 @@ function hintOf(els: Terminal, requestId: string, p: Probe, indent = INDENT): Re
   )
 }
 
-// A row with its pictures under it, `indent` cells in. Large only under the
-// ctrl+o transcript: with verbose on every row says it is expanded, so the
-// pictures keep the size the person chose.
+// Whether a row's pictures draw large, and whether it offers the zoom button.
+// The button shows only in fullscreen, the one layout that reports clicks, and
+// not where ctrl+o already draws the pictures large. With verbose on every row
+// says it is expanded, so there only the button makes them large.
+async function sizing(
+  $: EngineInterface,
+  e: { requestId: string; viewport?: RenderViewport },
+  isExpanded: boolean | undefined,
+): Promise<{ isBig: boolean; canZoom: boolean; isZoomed: boolean }> {
+  const isExpandedBig = isExpanded === true && !(await read($, verboseState))
+  const canZoom = e.viewport?.isFullscreen === true && !isExpandedBig
+  const isZoomed = canZoom && (await read($, memberOf(zoomState, { requestId: e.requestId })))
+  return { isBig: isExpandedBig || isZoomed, canZoom, isZoomed }
+}
+
+// The button under a row's pictures that draws them large in place, and back.
+function zoomRow($: EngineInterface, els: Terminal, requestId: string, isZoomed: boolean, indent: number): RenderNode {
+  const { Box, Button } = els
+  const zoom = memberOf(zoomState, { requestId })
+  return (
+    <Box paddingLeft={indent}>
+      <Button key="zoom" label={isZoomed ? '缩小' : '放大'} onPress={() => void update($, zoom, z => !z).catch(() => {})} />
+    </Box>
+  )
+}
+
+// A row with its pictures under it, `indent` cells in, large under the ctrl+o
+// transcript or once zoomed.
 async function under(
   $: EngineInterface,
   e: { requestId: string; viewport?: RenderViewport },
@@ -262,9 +250,9 @@ async function under(
   const p = await read($, probeState)
   const hint = hintOf(els, e.requestId, p, indent)
   if (p.canDraw === 'no' && hint === false) return row
-  const isBig = isExpanded === true && !(await read($, verboseState))
+  const { isBig, canZoom, isZoomed } = await sizing($, e, isExpanded)
   const room = Math.max(20, (e.viewport?.columns ?? 80) - indent - 1)
-  const { maxCols, maxRows } = boxOf(room, shown.length, isBig, isLarge)
+  const { maxCols, maxRows } = boxOf(room, shown.length, isBig, isLarge, bigRowsOf(e.viewport))
   const { Box } = els
   return (
     <Box flexDirection="column">
@@ -274,6 +262,7 @@ async function under(
           {shown.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
         </Box>
       )}
+      {p.canDraw !== 'no' && canZoom && zoomRow($, els, e.requestId, isZoomed, indent)}
       {hint}
     </Box>
   )
@@ -299,70 +288,7 @@ export const register: Register = (on, options) => {
     })
     $.clock.after(0, () => void rebuild($).catch(() => {}))
     $.clock.after(0, () => void readVerbose($).catch(() => {}))
-    const started = await next(e)
-    await $.command.register({
-      name: 'peek',
-      description: "See this session's pictures large in a pane, newest first (p/n to turn, Esc or /peek again to close)",
-      // Looking is for any moment, a turn in flight included.
-      immediate: true,
-    })
-    return started
-  })
-
-  // Opens the pane on the newest picture, or closes it when it is the one shown,
-  // so one key bound to the command does both. It prints nothing.
-  on('command.run', { command: 'peek' }, async ($, e) => {
-    const pane = (await $.ui.panes()).find(p => p.id === PANE)
-    if (pane?.isShown === true) {
-      await $.ui.close({ id: PANE })
-      return {}
-    }
-    if (gallery().length === 0) return { text: '这个会话里还没有图。' }
-    await update($, viewState, v => ({ ...v, id: '' }))
-    const columns = Math.max(24, Math.floor(e.presentation.columns * DOCK_SHARE))
-    await $.ui.open({ id: PANE, title: PANE_TITLE, focus: true, closeOnEscape: true, rows: PANE_ROWS, columns })
-    // On a timer, so it asks again once the command has run and the prompt is clear.
-    $.clock.after(0, () => void takeKeys($).catch(() => {}))
-    return {}
-  })
-
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    if (e.surface !== 'terminal') {
-      const { Text } = $.ui.resolve(e)
-      return <Text dimColor>图片在终端里查看。</Text>
-    }
-    const els = $.ui.resolve(e)
-    const { Box, Text, Button } = els
-    const list = gallery()
-    if (list.length === 0) return <Text dimColor>这个会话里还没有图。Esc 关闭</Text>
-    const v = await read($, viewState)
-    let i = list.findIndex(s => s.id === v.id)
-    if (i < 0) i = list.length - 1
-    const s = list[i]
-    const p = await read($, probeState)
-    const maxCols = Math.max(20, e.props.bodyColumns)
-    // Two rows under the picture: its caption and the keys.
-    const maxRows = Math.max(4, e.props.scroll.bodyRows - 2)
-    const size = s.width > 0 && s.height > 0 ? ` · ${s.width}×${s.height}` : ''
-    return (
-      <Box flexDirection="column">
-        {pictureOf(els, e.requestId, s, p, maxCols, maxRows)}
-        <Text dimColor>
-          {i + 1}/{list.length}
-          {s.label ? ` · ${s.label}` : ''}
-          {size}
-        </Text>
-        <Box columnGap={3}>
-          <Button key="prev" plain hotkey="p" autoFocus onPress={() => void turn($, -1).catch(() => {})}>
-            上一张
-          </Button>
-          <Button key="next" plain hotkey="n" onPress={() => void turn($, 1).catch(() => {})}>
-            下一张
-          </Button>
-          <Text dimColor>Esc 关闭</Text>
-        </Box>
-      </Box>
-    )
+    return next(e)
   })
 
   on('config.set', { key: 'verbose' }, async ($, e, next) => {
@@ -374,7 +300,6 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     if (e.reason === 'clear') {
       bytes.clear()
-      kept.clear()
       calls.clear()
       forgetAll()
     }
@@ -426,8 +351,9 @@ export const register: Register = (on, options) => {
     const hint = hintOf(els, e.requestId, p)
     if (p.canDraw === 'no' && hint === false) return next(e)
     const { Box, Text } = els
+    const { isBig, canZoom, isZoomed } = await sizing($, e, false)
     const room = Math.max(20, (e.viewport?.columns ?? 80) - INDENT - 1)
-    const { maxCols, maxRows } = boxOf(room, shown.length, false, isLarge)
+    const { maxCols, maxRows } = boxOf(room, shown.length, isBig, isLarge, bigRowsOf(e.viewport))
     const thumbs = shown.slice(-GROUP_THUMBS)
     const row = await next(e)
     return (
@@ -438,9 +364,10 @@ export const register: Register = (on, options) => {
             {thumbs.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
           </Box>
         )}
+        {p.canDraw !== 'no' && canZoom && zoomRow($, els, e.requestId, isZoomed, INDENT)}
         {p.canDraw !== 'no' && shown.length > thumbs.length && (
           <Box paddingLeft={INDENT}>
-            <Text dimColor>还有 {shown.length - thumbs.length} 张，/peek 逐张放大查看</Text>
+            <Text dimColor>还有 {shown.length - thumbs.length} 张，ctrl+o 展开查看</Text>
           </Box>
         )}
         {hint}

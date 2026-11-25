@@ -34,24 +34,8 @@ claude plugin install peek@kadaliao
 - **一张图**：在返回它的那一行下面画一张缩略图，大约 5 行高。
 - **粘贴的图**：画在你那条消息下面，大小和上面一样。
 - **几次 Read 折叠成一行**（"Read 3 files"）：缩略图并排画在这一行下面，每张 4 行高，最多 12 张。
-- **`/peek`**：在输入框上方（全屏模式下在对话旁边）开一个面板，把这个会话里的图一张一张画大，占满面板，最新的一张先出来。`p`、`n` 翻到上一张、下一张，Esc 关闭，再输一次 `/peek` 也关闭。Claude 干活时、开着 verbose 时、图早已打印出去时都能用。
-- **ctrl+o**：展开的对话里每张图都画成大图，最高 30 行，占满宽度。开着 verbose（`/config` 里的 Verbose output）时，每一行本来就是展开的，peek 分不出 ctrl+o，图一律按 `size` 选项的大小画；这时用 `/peek` 看大图。
-
-### 给 `/peek` 绑一个键
-
-mod 自己绑不了键，但 Claude Code 能把键绑到斜杠命令上。写进 `~/.claude/keybindings.json`（文件已存在就合并进去）：
-
-```json
-{
-  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
-  "$docs": "https://code.claude.com/docs/en/keybindings",
-  "bindings": [
-    { "context": "Chat", "bindings": { "ctrl+x p": "command:peek" } }
-  ]
-}
-```
-
-先按 ctrl+x 再按 p，在输入框里打开面板；输入框拿着键盘时再按一次就关闭。Claude Code 默认没有用这个组合。面板拿着键盘时按 Esc 关闭。
+- **放大**：全屏模式（`/tui fullscreen`）下，图下面有一个「放大」按钮，用鼠标点一下，图就在原地变大，最高 30 行、占满宽度，也不会超出屏幕；按钮随即变成「缩小」，再点一下还原。折叠成一行的几张图一起放大。非全屏模式下终端不报告点击，所以不显示这个按钮。
+- **ctrl+o**：展开的对话里每张图都画成大图，最高 30 行，占满宽度。开着 verbose（`/config` 里的 Verbose output）时，每一行本来就是展开的，peek 分不出 ctrl+o，图一律按 `size` 选项的大小画；想看大一些，把 `size` 设成 `large`。
 
 ## 终端
 
