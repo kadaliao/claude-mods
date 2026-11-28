@@ -16,6 +16,7 @@ function engine(on: On, messages: unknown[] = []) {
   })
   on('session.messages', () => ({ value: messages as never }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.id', () => ({ value: 'sess-1' }))
 }
 
 const callRow = (id: string, tool: string, input: unknown) => ({
@@ -411,4 +412,93 @@ test('a folded "Read N files" line zooms all its pictures at once', async ($, on
   await ui.press({ key: 'zoom' })
   expect((await ui.findAll({ type: 'Image' })).map(i => i.props.columns)).toEqual([94, 94])
   await ui.unmount()
+})
+
+test('zoomed, a PNG goes to the terminal as its file, which it reads and scales itself', async ($, on) => {
+  engine(on)
+  const runs: { argv: readonly string[]; stdin?: string }[] = []
+  on('process.run', (_, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '/tmp/claude-peek-501/pic.png', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  await returns($, 'toolu_36', 'Read', { file_path: '/work/wide.png' }, WIDE_PNG, 'image/png')
+  const ui = await $.ui.mount({ ...toolRow('toolu_36', 'Read', { file_path: '/work/wide.png' }), viewport: FULLSCREEN })
+  expect((await ui.find({ type: 'Image' }))?.props.source).not.toHaveProperty('file')
+
+  await ui.press({ key: 'zoom' })
+  const image = await ui.find({ type: 'Image' })
+  expect(image?.props).toMatchObject({ source: { file: '/tmp/claude-peek-501/pic.png', format: 'png' }, columns: 75, rows: 19 })
+  expect(runs).toHaveLength(1)
+  expect(runs[0]?.stdin).toBe(WIDE_PNG)
+
+  // Back to the thumbnail, and large again: the file is written once.
+  await ui.press({ key: 'zoom' })
+  await ui.press({ key: 'zoom' })
+  expect(runs).toHaveLength(1)
+  await ui.unmount()
+})
+
+test('where the file cannot be written, the zoomed picture goes as its pixels', async ($, on) => {
+  engine(on)
+  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: 'no base64', isStdoutTruncated: false, isStderrTruncated: false } }))
+  const output = { type: 'image', file: { base64: PNG, type: 'image/png', dimensions: { displayWidth: 16, displayHeight: 8 } } }
+  const ui = await $.ui.mount({ ...toolRow('toolu_37', 'Read', { file_path: '/work/small.png' }, { output }), viewport: FULLSCREEN })
+  await ui.press({ key: 'zoom' })
+  expect((await ui.find({ type: 'Image' }))?.props.source).toEqual({ png: PNG })
+  await ui.unmount()
+})
+
+const ITERM_FILES = 'the Image draws its alt here: iTerm2 inline images carry bytes and read no file or shared-memory name; send the picture as png or rgba bytes to draw it here'
+const wrote = (on: On) =>
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '/tmp/claude-peek-501/pic.png', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+
+test('a terminal that reads no files (iTerm2, tmux) gets the zoomed picture back as its pixels', async ($, on) => {
+  engine(on)
+  wrote(on)
+  const clock = mock.clock(on)
+  on('ui.blit', (_, e) => ({ value: 'source' in e && 'file' in e.source ? { deny: ITERM_FILES } : {} }))
+  await returns($, 'toolu_38', 'Read', { file_path: '/work/wide.png' }, WIDE_PNG, 'image/png')
+  const ui = await $.ui.mount({ ...toolRow('toolu_38', 'Read', { file_path: '/work/wide.png' }), viewport: FULLSCREEN })
+  await ui.press({ key: 'zoom' })
+  expect((await ui.find({ type: 'Image' }))?.props.source).toHaveProperty('file')
+
+  await clock.advance(500)
+  expect((await ui.find({ type: 'Image' }))?.props.source).toEqual({ png: WIDE_PNG })
+  await ui.unmount()
+})
+
+test('a terminal that reads files keeps drawing them so', async ($, on) => {
+  engine(on)
+  wrote(on)
+  const clock = mock.clock(on)
+  on('ui.blit', () => ({ value: {} }))
+  await returns($, 'toolu_39', 'Read', { file_path: '/work/wide.png' }, WIDE_PNG, 'image/png')
+  const ui = await $.ui.mount({ ...toolRow('toolu_39', 'Read', { file_path: '/work/wide.png' }), viewport: FULLSCREEN })
+  await ui.press({ key: 'zoom' })
+  await clock.advance(500)
+  expect((await ui.find({ type: 'Image' }))?.props.source).toHaveProperty('file')
+  await ui.unmount()
+})
+
+test('a picture over 4 million pixels goes as its pixels, not its file', async ($, on) => {
+  engine(on)
+  wrote(on)
+  const output = { type: 'image', file: { base64: PNG, type: 'image/png', dimensions: { displayWidth: 2600, displayHeight: 1600 } } }
+  const ui = await $.ui.mount({ ...toolRow('toolu_40', 'Read', { file_path: '/work/huge.png' }, { output }), viewport: FULLSCREEN })
+  await ui.press({ key: 'zoom' })
+  expect((await ui.find({ type: 'Image' }))?.props.source).not.toHaveProperty('file')
+  await ui.unmount()
+})
+
+test('a session that ends takes its picture files with it', async ($, on) => {
+  engine(on)
+  const runs: (readonly string[])[] = []
+  on('process.run', (_, e) => {
+    runs.push(e.argv)
+    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
+  const removal = runs.find(argv => argv.some(a => a.startsWith('rm -rf')))
+  expect(removal?.at(-1)).toBe('sess-1')
 })

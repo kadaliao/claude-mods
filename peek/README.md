@@ -44,6 +44,10 @@ There is nothing to type after that: the next picture Claude reads shows up unde
   draws them large in place with a click, up to 30 rows, the full width and no taller than the
   screen; it then reads 缩小, and a second click takes them back. A folded line's pictures zoom
   together. The main screen reports no clicks, so there the button is not drawn.
+  A zoomed PNG is not decoded in peek: it goes to the terminal as a temporary file the terminal
+  reads and scales itself, so it grows at once and at the picture's full sharpness. A terminal
+  that reads no files (iTerm2, tmux) gets the pixels as before, as do JPEGs and pictures over
+  4 million pixels. The files go when the session ends.
 - **ctrl+o**: the expanded transcript draws every picture large, up to 30 rows and the full width.
   With verbose on (Verbose output in `/config`) every row is already expanded and peek cannot tell
   ctrl+o apart, so pictures keep the size the `size` option sets; set it to `large` for bigger ones.
@@ -104,7 +108,7 @@ Set it in `/plugin`, or in `~/.claude/settings.json` under `pluginConfigs.peek`.
   that draws no pictures, the first picture can stay as a `[图片 …]` line, as the check takes a
   second.
 - Drawn on the terminal only. Mods (function hooks) are an early-access API of Claude Code and may
-  change between releases. Built and tested on Claude Code 2.1.322.
+  change between releases. Built and tested on Claude Code 2.1.332.
 
 ## Development
 

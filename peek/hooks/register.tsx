@@ -1,10 +1,12 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { Elements, EngineInterface, ImageSource, Register, RenderElement, RenderNode, RenderViewport } from 'claude-code'
 
-import type { Probe, Shot } from '../types'
+import type { Files, Probe, Shot } from '../types'
 import { noteCalls, pastedOf, picturesOf, promptKey } from './collect'
 import type { Found, ToolUse } from './collect'
+import { fileOf, removeFiles, sweepFiles } from './disk'
 import { draw, fit, forget, forgetAll } from './picture'
+import type { Drawn } from './picture'
 
 // How many pictures' bytes the session keeps; an older row says it let go.
 const KEEP = 100
@@ -19,6 +21,9 @@ const BIG_ROWS = 30
 // What a zoomed picture leaves of the screen for the prompt and what sits around
 // it, so the whole picture shows at once.
 const SCREEN_KEEP = 8
+// The largest picture handed to the terminal as its file, in pixels: the
+// terminal holds it whole, and herdr keeps 64 MiB of pictures a pane.
+const FILE_PIXELS = 4_000_000
 // Told to the model, so it shows a picture by reading it, not by opening it in
 // another app: without it, "show me a picture" ends in Preview.
 const PICTURES_NOTE = `# Pictures in the terminal
@@ -31,9 +36,12 @@ const probeState = atom({ plugin: 'peek', key: 'probe' } as const, { canDraw: 'u
 const verboseState = atom({ plugin: 'peek', key: 'verbose' } as const, false)
 // A family: whether the person zoomed a row's pictures with its button, by the row's id.
 const zoomState = atom({ plugin: 'peek', key: 'zoomed' } as const, false)
+// Whether the terminal reads a picture from its file.
+const filesState = atom({ plugin: 'peek', key: 'files' } as const, 'unknown' as Files)
 
 type Terminal = Elements['terminal']
-type Shown = Shot & { data?: string }
+// `file`: where the picture's bytes are on disk, for the terminal to read.
+type Shown = Shot & { data?: string; file?: string }
 
 // Bytes by picture id, oldest first. Kept in the module, not in state: a
 // reload reads them back from the conversation.
@@ -44,6 +52,9 @@ const calls = new Map<string, ToolUse>()
 // draws pictures: what the probe asks the terminal with.
 let lastShot: { requestId: string; key: string; source: ImageSource } | undefined
 let isProbing = false
+// The last picture drawn from its file: what the file probe asks with.
+let lastFile: { requestId: string; key: string; source: ImageSource } | undefined
+let filesTimer: { cancel: () => void } | undefined
 
 function keep(shot: Shot, data: string): void {
   bytes.delete(shot.id)
@@ -131,6 +142,37 @@ async function probe($: EngineInterface): Promise<void> {
   }
 }
 
+// Asks, through a blit of the last Image drawn from a file, whether the terminal
+// reads files: iTerm2 and tmux take bytes alone, and draw the alt in its place.
+// Where it does not, the large pictures go back to their pixels.
+async function probeFiles($: EngineInterface): Promise<void> {
+  const shot = lastFile
+  if (shot === undefined || (await read($, filesState)) !== 'unknown') return
+  const r = await $.ui.blit({ requestId: shot.requestId, key: shot.key, source: shot.source })
+  if (r.deny === undefined) await update($, filesState, (): Files => 'yes')
+  else if (/read no file|cannot read files/.test(r.deny)) await update($, filesState, (): Files => 'no')
+  // Anything else (not asked yet, no longer mounted) is asked again on a later tick.
+}
+
+// Starts asking, once a picture was drawn from its file, until the answer is in;
+// for ten seconds at most, then again when the next one is drawn.
+function askFiles($: EngineInterface): void {
+  if (filesTimer !== undefined) return
+  let tries = 0
+  const timer = $.clock.every(500, () => {
+    void probeFiles($)
+      .then(async () => {
+        if ((await read($, filesState)) !== 'unknown') timer.cancel()
+        else if (++tries >= 20) {
+          timer.cancel()
+          filesTimer = undefined
+        }
+      })
+      .catch(() => {})
+  })
+  filesTimer = timer
+}
+
 type ReadOutput = {
   type?: string
   file?: {
@@ -189,10 +231,15 @@ function pictureOf(els: Terminal, requestId: string, s: Shown, p: Probe, maxCols
   const { Text, Image } = els
   if (s.data === undefined) return <Text dimColor>（这张图太早，已经不在内存里了）</Text>
   const { columns, rows } = fit(s.width, s.height, maxCols, maxRows)
-  const d = draw(s.id, s.mime, s.data, columns, rows)
+  const d: Drawn =
+    s.file !== undefined
+      ? { kind: 'image', source: { file: s.file, format: 'png' }, columns, rows }
+      : draw(s.id, s.mime, s.data, columns, rows)
   if (d.kind === 'none') return <Text dimColor>（{d.reason}）</Text>
   const key = `img-${s.id}`
-  if (p.canDraw === 'unknown') lastShot = { requestId, key, source: d.source }
+  // A file asks the file probe: a terminal that draws bytes alone draws its alt.
+  if (s.file !== undefined) lastFile = { requestId, key, source: d.source }
+  else if (p.canDraw === 'unknown') lastShot = { requestId, key, source: d.source }
   const size = s.width > 0 && s.height > 0 ? ` ${s.width}×${s.height}` : ''
   return <Image key={key} source={d.source} columns={d.columns} rows={d.rows} alt={`[图片${s.label ? ` ${s.label}` : ''}${size}]`} />
 }
@@ -224,6 +271,22 @@ async function sizing(
   return { isBig: isExpandedBig || isZoomed, canZoom, isZoomed }
 }
 
+// Drawn large, a PNG goes to the terminal as a file it reads and scales itself:
+// nothing decoded here, and a path down the pipe in place of the pixels.
+// Thumbnails stay bytes, as do pictures over FILE_PIXELS, and all of them where
+// the terminal reads no files.
+async function onDisk($: EngineInterface, shown: Shown[], isBig: boolean): Promise<Shown[]> {
+  if (!isBig || (await read($, filesState)) === 'no') return shown
+  const drawn = await Promise.all(
+    shown.map(async s => {
+      const isFit = s.mime === 'image/png' && s.width > 0 && s.height > 0 && s.width * s.height <= FILE_PIXELS
+      return isFit && s.data !== undefined ? { ...s, file: await fileOf($, s.id, s.data) } : s
+    }),
+  )
+  if (drawn.some(s => s.file !== undefined)) askFiles($)
+  return drawn
+}
+
 // The button under a row's pictures that draws them large in place, and back.
 function zoomRow($: EngineInterface, els: Terminal, requestId: string, isZoomed: boolean, indent: number): RenderNode {
   const { Box, Button } = els
@@ -253,13 +316,14 @@ async function under(
   const { isBig, canZoom, isZoomed } = await sizing($, e, isExpanded)
   const room = Math.max(20, (e.viewport?.columns ?? 80) - indent - 1)
   const { maxCols, maxRows } = boxOf(room, shown.length, isBig, isLarge, bigRowsOf(e.viewport))
+  const drawn = await onDisk($, shown, isBig && p.canDraw !== 'no')
   const { Box } = els
   return (
     <Box flexDirection="column">
       {row}
       {p.canDraw !== 'no' && (
         <Box paddingLeft={indent} flexWrap="wrap" columnGap={1}>
-          {shown.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
+          {drawn.map(s => pictureOf(els, e.requestId, s, p, maxCols, maxRows))}
         </Box>
       )}
       {p.canDraw !== 'no' && canZoom && zoomRow($, els, e.requestId, isZoomed, indent)}
@@ -288,6 +352,7 @@ export const register: Register = (on, options) => {
     })
     $.clock.after(0, () => void rebuild($).catch(() => {}))
     $.clock.after(0, () => void readVerbose($).catch(() => {}))
+    $.clock.after(0, () => void sweepFiles($))
     return next(e)
   })
 
@@ -303,6 +368,8 @@ export const register: Register = (on, options) => {
       calls.clear()
       forgetAll()
     }
+    // The pictures it wrote for the terminal go with it.
+    await removeFiles($, e.sessionId)
     return next(e)
   })
 
@@ -354,7 +421,7 @@ export const register: Register = (on, options) => {
     const { isBig, canZoom, isZoomed } = await sizing($, e, false)
     const room = Math.max(20, (e.viewport?.columns ?? 80) - INDENT - 1)
     const { maxCols, maxRows } = boxOf(room, shown.length, isBig, isLarge, bigRowsOf(e.viewport))
-    const thumbs = shown.slice(-GROUP_THUMBS)
+    const thumbs = await onDisk($, shown.slice(-GROUP_THUMBS), isBig && p.canDraw !== 'no')
     const row = await next(e)
     return (
       <Box flexDirection="column">

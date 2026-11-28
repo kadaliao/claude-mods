@@ -14,6 +14,10 @@ export type Shot = {
 // the row that says how to get them (`hint`), the first time on this terminal.
 export type Probe = { canDraw: 'unknown' | 'yes' | 'no'; hintAt?: string; hint?: string }
 
+// Whether the terminal reads a picture from its file, as found out the first
+// time a large one is drawn so (iTerm2 and tmux take bytes alone).
+export type Files = 'unknown' | 'yes' | 'no'
+
 declare module 'claude-code' {
   interface PluginState {
     peek: {
@@ -25,6 +29,7 @@ declare module 'claude-code' {
       verbose: boolean
       // Whether the person zoomed a row's pictures with the button under them, by the row's id.
       zoomed: StateFamily<boolean>
+      files: Files
     }
   }
 }
