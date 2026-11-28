@@ -4,7 +4,7 @@ import type { Elements, EngineInterface, ImageSource, Register, RenderElement, R
 import type { Files, Probe, Shot } from '../types'
 import { noteCalls, pastedOf, picturesOf, promptKey } from './collect'
 import type { Found, ToolUse } from './collect'
-import { fileOf, removeFiles, sweepFiles } from './disk'
+import { canWrite, fileOf, removeFiles, sweepFiles } from './disk'
 import { draw, fit, forget, forgetAll } from './picture'
 import type { Drawn } from './picture'
 
@@ -271,16 +271,16 @@ async function sizing(
   return { isBig: isExpandedBig || isZoomed, canZoom, isZoomed }
 }
 
-// Drawn large, a PNG goes to the terminal as a file it reads and scales itself:
-// nothing decoded here, and a path down the pipe in place of the pixels.
-// Thumbnails stay bytes, as do pictures over FILE_PIXELS, and all of them where
-// the terminal reads no files.
+// Drawn large, a PNG or JPEG goes to the terminal as a PNG file it reads and
+// scales itself: nothing decoded here, and a path down the pipe in place of the
+// pixels. Thumbnails stay bytes, as do pictures over FILE_PIXELS, and all of
+// them where the terminal reads no files.
 async function onDisk($: EngineInterface, shown: Shown[], isBig: boolean): Promise<Shown[]> {
   if (!isBig || (await read($, filesState)) === 'no') return shown
   const drawn = await Promise.all(
     shown.map(async s => {
-      const isFit = s.mime === 'image/png' && s.width > 0 && s.height > 0 && s.width * s.height <= FILE_PIXELS
-      return isFit && s.data !== undefined ? { ...s, file: await fileOf($, s.id, s.data) } : s
+      const isFit = canWrite(s.mime) && s.width > 0 && s.height > 0 && s.width * s.height <= FILE_PIXELS
+      return isFit && s.data !== undefined ? { ...s, file: await fileOf($, s.id, s.mime, s.data) } : s
     }),
   )
   if (drawn.some(s => s.file !== undefined)) askFiles($)

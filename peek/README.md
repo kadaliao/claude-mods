@@ -44,10 +44,11 @@ There is nothing to type after that: the next picture Claude reads shows up unde
   draws them large in place with a click, up to 30 rows, the full width and no taller than the
   screen; it then reads 缩小, and a second click takes them back. A folded line's pictures zoom
   together. The main screen reports no clicks, so there the button is not drawn.
-  A zoomed PNG is not decoded in peek: it goes to the terminal as a temporary file the terminal
-  reads and scales itself, so it grows at once and at the picture's full sharpness. A terminal
-  that reads no files (iTerm2, tmux) gets the pixels as before, as do JPEGs and pictures over
-  4 million pixels. The files go when the session ends.
+  A zoomed PNG or JPEG is not decoded in peek: it goes to the terminal as a temporary file the
+  terminal reads and scales itself, so it grows at once and at the picture's full sharpness.
+  Terminals read no JPEG, so macOS's sips turns it into a PNG first; where there is no sips, a
+  JPEG goes as its pixels. So does every picture on a terminal that reads no files (iTerm2,
+  tmux), and pictures over 4 million pixels. The files go when the session ends.
 - **ctrl+o**: the expanded transcript draws every picture large, up to 30 rows and the full width.
   With verbose on (Verbose output in `/config`) every row is already expanded and peek cannot tell
   ctrl+o apart, so pictures keep the size the `size` option sets; set it to `large` for bigger ones.

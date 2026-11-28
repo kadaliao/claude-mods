@@ -6,13 +6,22 @@ import type { EngineInterface } from 'claude-code'
 
 // The folder the sessions' folders sit in, the user's own.
 const ROOT = '"${TMPDIR:-/tmp}"/claude-peek-$(id -u)'
-// Decodes standard input into `<root>/<session $1>/<$2>.png` and prints its
-// path. `$.fs` writes only text, so the bytes go through `base64 -d`, written
-// under another name first so the terminal never reads half a file. A root
-// someone else made fails the chmod, and with it the write.
-const WRITE =
-  `d=${ROOT}/"$1"; mkdir -p "$d" && chmod 700 "\${d%/*}" "$d" && f="$d/$2.png" && ` +
-  'base64 -d > "$f.part" && mv "$f.part" "$f" && printf %s "$f"'
+// Writes standard input, base64, as `<root>/<session $1>/<$2>.png` by `steps`
+// (which leave the PNG at `$t`) and prints its path. `$.fs` writes only text, so
+// the bytes go through `base64 -d`; the PNG is moved in whole, so the terminal
+// never reads half a file. A root someone else made fails the chmod, and with
+// it the write. What is left half-made is removed, written or not.
+const script = (steps: string) =>
+  `d=${ROOT}/"$1"; f="$d/$2.png"; t="$d/$2.tmp.png"; s="$d/$2.src"; ` +
+  `mkdir -p "$d" && chmod 700 "\${d%/*}" "$d" && ${steps} && mv "$t" "$f" && printf %s "$f"; ` +
+  'r=$?; rm -f "$t" "$s"; exit $r'
+// By the picture's type: a PNG as it is; a JPEG, which terminals do not read,
+// turned into a PNG by macOS's sips. Without sips the write fails, and the
+// picture goes as its pixels.
+const WRITE: Record<string, string> = {
+  'image/png': script('base64 -d > "$t"'),
+  'image/jpeg': script('[ -x /usr/bin/sips ] && base64 -d > "$s" && /usr/bin/sips -s format png "$s" --out "$t" >/dev/null 2>&1'),
+}
 // Removes session $1's folder.
 const REMOVE = `rm -rf ${ROOT}/"$1"`
 // Removes what sessions that never ended cleanly left, two days on.
@@ -23,19 +32,24 @@ const written = new Map<string, Promise<string | undefined>>()
 
 const safe = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, '_') || '_'
 
-async function write($: EngineInterface, id: string, data: string): Promise<string | undefined> {
+// Whether a picture of this type can go to the terminal as a file.
+export const canWrite = (mime: string): boolean => mime in WRITE
+
+async function write($: EngineInterface, id: string, mime: string, data: string): Promise<string | undefined> {
+  const steps = WRITE[mime]
+  if (steps === undefined) return undefined
   const session = safe(await $.session.id())
-  const r = await $.process.run(['/bin/sh', '-c', WRITE, 'peek', session, safe(id)], { stdin: data })
+  const r = await $.process.run(['/bin/sh', '-c', steps, 'peek', session, safe(id)], { stdin: data })
   const path = r.stdout.trim()
   return r.exitCode === 0 && path.startsWith('/') ? path : undefined
 }
 
-// The file that holds PNG `id` (`data` its base64 bytes), written the first
-// time it is asked for.
-export function fileOf($: EngineInterface, id: string, data: string): Promise<string | undefined> {
+// The PNG file that holds picture `id` (`data` its base64 bytes, of type
+// `mime`), written the first time it is asked for.
+export function fileOf($: EngineInterface, id: string, mime: string, data: string): Promise<string | undefined> {
   let path = written.get(id)
   if (path === undefined) {
-    path = write($, id, data).catch(() => undefined)
+    path = write($, id, mime, data).catch(() => undefined)
     written.set(id, path)
   }
   return path

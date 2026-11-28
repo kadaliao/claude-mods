@@ -502,3 +502,29 @@ test('a session that ends takes its picture files with it', async ($, on) => {
   const removal = runs.find(argv => argv.some(a => a.startsWith('rm -rf')))
   expect(removal?.at(-1)).toBe('sess-1')
 })
+
+test('zoomed, a JPEG goes to the terminal as a PNG file that sips turned it into', async ($, on) => {
+  engine(on)
+  const runs: { argv: readonly string[]; stdin?: string }[] = []
+  on('process.run', (_, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '/tmp/claude-peek-501/shot.png', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  await returns($, 'toolu_41', 'mcp__claude-in-chrome__computer', { action: 'screenshot' }, JPEG, 'image/jpeg')
+  const ui = await $.ui.mount({ ...toolRow('toolu_41', 'mcp__claude-in-chrome__computer', { action: 'screenshot' }), viewport: FULLSCREEN })
+  await ui.press({ key: 'zoom' })
+  expect((await ui.find({ type: 'Image' }))?.props.source).toEqual({ file: '/tmp/claude-peek-501/shot.png', format: 'png' })
+  expect(runs[0]?.stdin).toBe(JPEG)
+  expect(runs[0]?.argv.join(' ')).toContain('/usr/bin/sips -s format png')
+  await ui.unmount()
+})
+
+test('without sips, a zoomed JPEG goes as its pixels', async ($, on) => {
+  engine(on)
+  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  await returns($, 'toolu_42', 'mcp__claude-in-chrome__computer', { action: 'screenshot' }, JPEG, 'image/jpeg')
+  const ui = await $.ui.mount({ ...toolRow('toolu_42', 'mcp__claude-in-chrome__computer', { action: 'screenshot' }), viewport: FULLSCREEN })
+  await ui.press({ key: 'zoom' })
+  expect((await ui.find({ type: 'Image' }))?.props.source).toHaveProperty('rgba')
+  await ui.unmount()
+})
